@@ -1,11 +1,40 @@
+// app/(auth)/register.tsx
 import React, { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  SafeAreaView,
+} from "react-native";
 import { useRouter } from "expo-router";
+import { useAuth } from "@/src/features/auth/AuthProvider";
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { signUp, isAuthActionLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const [infoText, setInfoText] = useState<string | null>(null);
+
+  const handleSignUp = async () => {
+    setErrorText(null);
+    setInfoText(null);
+
+    const { error } = await signUp(email.trim(), password);
+
+    if (error) {
+      setErrorText(error);
+      return;
+    }
+
+    setInfoText(
+      "Account created. Check your email if confirmation is required."
+    );
+    router.replace("/login");
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -16,6 +45,8 @@ export default function RegisterScreen() {
           style={styles.input}
           placeholder="Email"
           placeholderTextColor="#7780a0"
+          autoCapitalize="none"
+          keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
         />
@@ -29,8 +60,20 @@ export default function RegisterScreen() {
           onChangeText={setPassword}
         />
 
-        <Pressable style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>Sign Up</Text>
+        {errorText && <Text style={styles.errorText}>{errorText}</Text>}
+        {infoText && <Text style={styles.infoText}>{infoText}</Text>}
+
+        <Pressable
+          style={[
+            styles.primaryButton,
+            isAuthActionLoading && styles.primaryButtonDisabled,
+          ]}
+          onPress={handleSignUp}
+          disabled={isAuthActionLoading}
+        >
+          <Text style={styles.primaryButtonText}>
+            {isAuthActionLoading ? "Creating account..." : "Sign Up"}
+          </Text>
         </Pressable>
 
         <Pressable onPress={() => router.push("/login")}>
@@ -45,6 +88,7 @@ const ACCENT = "#3896ff";
 const BG = "#050814";
 const BORDER = "#1a2035";
 const MUTED = "#a6b1cc";
+const ERROR = "#ff4b5c";
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -79,6 +123,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
   },
+  primaryButtonDisabled: {
+    opacity: 0.7,
+  },
   primaryButtonText: {
     color: "#fff",
     fontSize: 16,
@@ -89,5 +136,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 16,
     fontSize: 14,
+  },
+  errorText: {
+    color: ERROR,
+    fontSize: 13,
+    marginTop: 4,
+  },
+  infoText: {
+    color: MUTED,
+    fontSize: 13,
+    marginTop: 4,
   },
 });

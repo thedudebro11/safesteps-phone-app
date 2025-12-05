@@ -1,8 +1,8 @@
 // app/(tabs)/_layout.tsx
-
 import React from "react";
-import { Tabs } from "expo-router";
+import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "@/src/features/auth/AuthProvider";
 
 const ACCENT = "#3896ff";
 const BG = "#050814";
@@ -10,6 +10,17 @@ const BORDER = "#1a2035";
 const MUTED = "#a6b1cc";
 
 export default function TabsLayout() {
+  const { user, isInitialLoading } = useAuth();
+
+  if (isInitialLoading) {
+    // Root layout already shows loading UI
+    return null;
+  }
+
+  if (!user) {
+    return <Redirect href="/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -31,7 +42,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
       <Tabs.Screen
         name="contacts"
         options={{
@@ -41,7 +51,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
       <Tabs.Screen
         name="history"
         options={{
@@ -51,7 +60,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
       <Tabs.Screen
         name="settings"
         options={{

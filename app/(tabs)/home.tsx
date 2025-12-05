@@ -11,12 +11,13 @@ import {
 
 import { useRouter } from "expo-router";
 
+const router = useRouter();
 
 export default function HomeScreen() {
   const handleLoginPress = () => {
   router.push("/login");
 }
-const router = useRouter();
+
 
 
 
