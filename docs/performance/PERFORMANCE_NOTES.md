@@ -1,6 +1,6 @@
 # SafeSteps – Performance Notes
 
-_Last updated: TODO_
+
 
 ## 1. Current State (Pre-v1)
 

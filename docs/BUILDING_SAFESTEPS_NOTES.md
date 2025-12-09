@@ -1,16 +1,3 @@
-Here is **ONE clean, complete, production-grade `ISSUE_LOG.md` file** — formatted exactly the way senior engineers structure internal runbooks, debugging journals, and postmortem logs.
-
-Copy & paste the entire block below into:
-
-```
-/docs/ISSUE_LOG.md
-```
-
----
-
-# ⭐⭐ **COPY THIS ENTIRE BLOCK INTO `ISSUE_LOG.md` (ONE PASTE)** ⭐⭐
-
-```md
 # SafeSteps — Issue Log & Developer Journal
 
 This file documents **every problem, debugging session, root cause analysis, and solution** encountered while building SafeSteps.

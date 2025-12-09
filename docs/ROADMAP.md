@@ -1,6 +1,6 @@
 # SafeSteps – Roadmap
 
-_Last updated: TODO_
+
 
 ## Stage 0 – Foundation (IN PROGRESS)
 

@@ -1,50 +1,124 @@
-# Welcome to your Expo app 👋
+# SafeSteps – Privacy-First Personal Safety App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+SafeSteps is a **privacy-first GPS safety application** built with Expo + React Native, Supabase, and an Express backend.  
+It allows users to:
 
-## Get started
+- Share their live location only when they choose  
+- Enable **Active Tracking** at custom intervals  
+- Trigger **Emergency Mode** with high-frequency pings  
+- Maintain **Trusted Contacts** who can receive emergency alerts  
+- View **Location History** with normal vs emergency ping labeling  
+- Share a **Live Location Link** with anyone (future)  
 
-1. Install dependencies
+SafeSteps focuses on **user control**, **battery efficiency**, and **zero surveillance** — tracking is only active when a user explicitly enables it.
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
+## 🚀 Tech Stack
 
-   ```bash
-   npx expo start
-   ```
+### **Frontend**
+- Expo (React Native)
+- TypeScript
+- Expo Router
+- Supabase JS Client
+- SecureStore (for native session persistence)
 
-In the output, you'll find options to open the app in a
+### **Backend**
+- Node.js + Express
+- Supabase (Auth + Postgres + RLS)
+- JWT verification on all protected routes
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### **Database**
+- `trusted_contacts`
+- `location_pings`
+- (Future) `share_links`
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+---
 
-## Get a fresh project
+## 📁 Project Structure (Simplified)
 
-When you're ready, run:
+/app
+(auth)/
+(tabs)/
+_layout.tsx
+index.tsx
 
-```bash
-npm run reset-project
-```
+/src
+features/
+auth/
+tracking/
+contacts/
+history/
+lib/
+supabase.ts
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+/server
+src/
+routes/
+services/
+middleware/
+config/
 
-## Learn more
+docs/
+SAFESTEPS_MASTER_SUMMARY.md
+ROADMAP.md
+CHANGELOG.md
+DESIGN_GUIDE.md
+ISSUE_LOG.md
+...
 
-To learn more about developing your project with Expo, look at the following resources:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+---
 
-## Join the community
+## 📘 Documentation
 
-Join our community of developers creating universal apps.
+All major documentation files are kept under `/docs`.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+See **DOCS_INDEX.md** for a master directory of all documentation.
+
+---
+
+## 🧪 Development
+
+### Start the mobile app:
+npx expo start
+
+
+### Start the backend (once generated):
+npm run dev
+
+
+### TypeScript checks:
+npm run typecheck
+
+## 🛡 Privacy Philosophy
+
+SafeSteps does *not* require “Always-Allow Location.”  
+It only tracks when:
+
+- User activates **Active Tracking**, or  
+- User activates **Emergency Mode**  
+
+No background tracking is forced.  
+No analytics SDKs.  
+No silent data collection.  
+
+---
+
+## 🧭 Roadmap
+
+See `docs/ROADMAP.md`.
+
+---
+
+## 💬 Issues
+
+If you encounter problems or architectural decisions, log them in:
+
+`docs/ISSUE_LOG.md`
+
+---
+
+## 📝 License
+
+SafeSteps is owned by the creator. License TBD.

@@ -1,17 +1,3 @@
-Got you.
-Here is **ONE SINGLE, CLEAN, FULLY-FORMED `API_SPEC.md` FILE** — no breaks, no multiple blocks, no separation.
-
-You can copy **this entire thing exactly as-is** and paste it straight into:
-
-```
-/docs/api/API_SPEC.md
-```
-
----
-
-# ⭐⭐ **COPY THIS ENTIRE BLOCK INTO `API_SPEC.md` (ONE PASTE)** ⭐⭐
-
-```md
 # SafeSteps — API Specification
 
 Base URL (development):  
@@ -239,6 +225,4 @@ Status: *Not yet implemented.*
 ```
 
 ---
-
-# ✅ You're all set.
 
