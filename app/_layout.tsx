@@ -1,42 +1,57 @@
 // app/_layout.tsx
-import React from "react";
-import { Stack } from "expo-router";
-import { AuthProvider, useAuth } from "@/src/features/auth/AuthProvider";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import React, { useEffect } from "react";
+import { Stack, useRouter } from "expo-router";
+import {
+  AuthProvider,
+  useAuth,
+} from "@/src/features/auth/AuthProvider";
+import { ActivityIndicator, View } from "react-native";
 
-function RootGate() {
-  const { isInitialLoading } = useAuth();
+function RootNavigator() {
+  const { isAuthLoaded, hasSession } = useAuth();
+  const router = useRouter();
 
-  if (isInitialLoading) {
+  // Hard-sync URL with auth state
+  useEffect(() => {
+    if (!isAuthLoaded) return;
+
+    if (!hasSession) {
+      // No user + not guest → force them to auth
+      router.replace("/login");
+    } else {
+      // Guest or authenticated user → main app
+      router.replace("/home");
+    }
+  }, [isAuthLoaded, hasSession, router]);
+
+  if (!isAuthLoaded) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "#050814",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator />
       </View>
     );
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    />
+    <Stack screenOptions={{ headerShown: false }}>
+      {/* Two high-level groups: auth screens and tabs */}
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="(tabs)" />
+    </Stack>
   );
 }
 
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootGate />
+      <RootNavigator />
     </AuthProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: "#050814",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});

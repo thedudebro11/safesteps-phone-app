@@ -4,91 +4,114 @@ import {
   View,
   Text,
   TextInput,
-  Pressable,
   StyleSheet,
+  Pressable,
   SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { Link } from "expo-router";
 import { useAuth } from "@/src/features/auth/AuthProvider";
 
+const BG = "#050814";
+const CARD_BG = "#0c1020";
+const BORDER = "#1a2035";
+const ACCENT = "#3896ff";
+const MUTED = "#a6b1cc";
+
 export default function RegisterScreen() {
-  const router = useRouter();
-  const { signUp, isAuthActionLoading } = useAuth();
+  const { signUpWithEmail, isAuthActionLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errorText, setErrorText] = useState<string | null>(null);
-  const [infoText, setInfoText] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState("");
 
-  const handleSignUp = async () => {
-    setErrorText(null);
-    setInfoText(null);
-
-    const { error } = await signUp(email.trim(), password);
-
-    if (error) {
-      setErrorText(error);
+  const handleRegister = async () => {
+    if (!email || !password || !confirm) return;
+    if (password !== confirm) {
+      // simple UX; you can swap this for a nicer banner later
+      alert("Passwords do not match");
       return;
     }
-
-    setInfoText(
-      "Account created. Check your email if confirmation is required."
-    );
-    router.replace("/login");
+    await signUpWithEmail(email.trim(), password);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Create Account</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#7780a0"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          secureTextEntry
-          placeholderTextColor="#7780a0"
-          value={password}
-          onChangeText={setPassword}
-        />
-
-        {errorText && <Text style={styles.errorText}>{errorText}</Text>}
-        {infoText && <Text style={styles.infoText}>{infoText}</Text>}
-
-        <Pressable
-          style={[
-            styles.primaryButton,
-            isAuthActionLoading && styles.primaryButtonDisabled,
-          ]}
-          onPress={handleSignUp}
-          disabled={isAuthActionLoading}
-        >
-          <Text style={styles.primaryButtonText}>
-            {isAuthActionLoading ? "Creating account..." : "Sign Up"}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.select({ ios: "padding", android: undefined })}
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>Create account</Text>
+          <Text style={styles.subtitle}>
+            Make a SafeSteps account to sync history, trusted contacts and
+            family maps across devices.
           </Text>
-        </Pressable>
+        </View>
 
-        <Pressable onPress={() => router.push("/login")}>
-          <Text style={styles.link}>Already have an account?</Text>
-        </Pressable>
-      </View>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Sign up</Text>
+
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            placeholderTextColor={MUTED}
+          />
+
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            style={styles.input}
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            placeholder="••••••••"
+            placeholderTextColor={MUTED}
+          />
+
+          <Text style={styles.label}>Confirm password</Text>
+          <TextInput
+            style={styles.input}
+            secureTextEntry
+            value={confirm}
+            onChangeText={setConfirm}
+            placeholder="••••••••"
+            placeholderTextColor={MUTED}
+          />
+
+          <Pressable
+            style={[
+              styles.primaryButton,
+              (!email || !password || !confirm || isAuthActionLoading) &&
+                styles.disabled,
+            ]}
+            onPress={handleRegister}
+            disabled={
+              !email || !password || !confirm || isAuthActionLoading
+            }
+          >
+            <Text style={styles.primaryText}>
+              {isAuthActionLoading ? "Creating account..." : "Create Account"}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            Already have an account?{" "}
+            <Link href="/login" style={styles.linkText}>
+              Sign in
+            </Link>
+          </Text>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
-const ACCENT = "#3896ff";
-const BG = "#050814";
-const BORDER = "#1a2035";
-const MUTED = "#a6b1cc";
-const ERROR = "#ff4b5c";
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -97,54 +120,77 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 22,
-    justifyContent: "center",
+    padding: 20,
     gap: 16,
+  },
+  header: {
+    marginBottom: 8,
   },
   title: {
     color: "#fff",
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "800",
-    marginBottom: 12,
   },
-  input: {
-    backgroundColor: "#0c1020",
-    color: "#fff",
-    borderRadius: 14,
-    padding: 14,
+  subtitle: {
+    color: MUTED,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: CARD_BG,
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: BORDER,
-    fontSize: 16,
+    gap: 10,
+  },
+  cardTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  label: {
+    color: MUTED,
+    fontSize: 13,
+    marginTop: 4,
+  },
+  input: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#fff",
+    fontSize: 14,
+    marginTop: 4,
   },
   primaryButton: {
+    marginTop: 14,
     backgroundColor: ACCENT,
-    paddingVertical: 14,
     borderRadius: 14,
+    paddingVertical: 12,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
   },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
+  primaryText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
   },
-  link: {
-    color: ACCENT,
-    textAlign: "center",
-    marginTop: 16,
-    fontSize: 14,
+  disabled: {
+    opacity: 0.6,
   },
-  errorText: {
-    color: ERROR,
-    fontSize: 13,
-    marginTop: 4,
+  footer: {
+    marginTop: "auto",
+    alignItems: "center",
   },
-  infoText: {
+  footerText: {
     color: MUTED,
     fontSize: 13,
-    marginTop: 4,
+  },
+  linkText: {
+    color: ACCENT,
+    fontWeight: "700",
   },
 });

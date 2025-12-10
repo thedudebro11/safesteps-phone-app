@@ -4,86 +4,109 @@ import {
   View,
   Text,
   TextInput,
-  Pressable,
   StyleSheet,
+  Pressable,
   SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { useAuth } from "@/src/features/auth/AuthProvider";
 
+const BG = "#050814";
+const CARD_BG = "#0c1020";
+const BORDER = "#1a2035";
+const ACCENT = "#3896ff";
+const MUTED = "#a6b1cc";
+
 export default function LoginScreen() {
-  const router = useRouter();
-  const { signIn, isAuthActionLoading } = useAuth();
+  const { signInWithEmail, isAuthActionLoading, startGuestSession } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errorText, setErrorText] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    setErrorText(null);
-    const { error } = await signIn(email.trim(), password);
+    if (!email || !password) return;
+    await signInWithEmail(email.trim(), password);
+  };
 
-    if (error) {
-      setErrorText(error);
-      return;
-    }
-
-    // Auth layout will redirect once user is set,
-    // but we can also be explicit:
-    router.replace("/home");
+  const handleGuest = () => {
+    console.log("[Login] Continue as Guest pressed");
+    startGuestSession();
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Log In</Text>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.select({ ios: "padding", android: undefined })}
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>SafeSteps</Text>
+          <Text style={styles.subtitle}>
+            Private-by-default safety. No account required to start.
+          </Text>
+        </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#7780a0"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Sign in</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#7780a0"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            placeholderTextColor={MUTED}
+          />
 
-        {errorText && <Text style={styles.errorText}>{errorText}</Text>}
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            style={styles.input}
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            placeholder="••••••••"
+            placeholderTextColor={MUTED}
+          />
 
-        <Pressable
-          style={[
-            styles.primaryButton,
-            isAuthActionLoading && styles.primaryButtonDisabled,
-          ]}
-          onPress={handleLogin}
-          disabled={isAuthActionLoading}
-        >
-          <Text style={styles.primaryButtonText}>
-            {isAuthActionLoading ? "Logging in..." : "Log In"}
+          <Pressable
+            style={[
+              styles.primaryButton,
+              (!email || !password || isAuthActionLoading) && styles.disabled,
+            ]}
+            onPress={handleLogin}
+            disabled={!email || !password || isAuthActionLoading}
+          >
+            <Text style={styles.primaryText}>
+              {isAuthActionLoading ? "Signing in..." : "Sign In"}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.dividerBlock}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        <Pressable style={styles.guestButton} onPress={handleGuest}>
+          <Text style={styles.guestTitle}>Continue as Guest</Text>
+          <Text style={styles.guestSubtitle}>
+            No account. Location stays on this device unless you upgrade.
           </Text>
         </Pressable>
 
-        <Pressable onPress={() => router.push("/register")}>
-          <Text style={styles.link}>Create an account</Text>
-        </Pressable>
-      </View>
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            New here? Open the app as a guest now and create an account later
+            if you want cloud backup, trusted contacts, or family maps.
+          </Text>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
-const ACCENT = "#3896ff";
-const BG = "#050814";
-const BORDER = "#1a2035";
-const MUTED = "#a6b1cc";
-const ERROR = "#ff4b5c";
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -92,49 +115,106 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 22,
-    justifyContent: "center",
+    padding: 20,
     gap: 16,
+  },
+  header: {
+    marginBottom: 8,
   },
   title: {
     color: "#fff",
     fontSize: 32,
     fontWeight: "800",
-    marginBottom: 12,
   },
-  input: {
-    backgroundColor: "#0c1020",
-    color: "#fff",
-    borderRadius: 14,
-    padding: 14,
+  subtitle: {
+    color: MUTED,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: CARD_BG,
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: BORDER,
-    fontSize: 16,
+    gap: 10,
+  },
+  cardTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  label: {
+    color: MUTED,
+    fontSize: 13,
+    marginTop: 4,
+  },
+  input: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#fff",
+    fontSize: 14,
+    marginTop: 4,
   },
   primaryButton: {
+    marginTop: 14,
     backgroundColor: ACCENT,
-    paddingVertical: 14,
     borderRadius: 14,
+    paddingVertical: 12,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
   },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
+  primaryText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
   },
-  link: {
-    color: ACCENT,
-    textAlign: "center",
-    marginTop: 16,
-    fontSize: 14,
+  disabled: {
+    opacity: 0.6,
   },
-  errorText: {
-    color: ERROR,
-    fontSize: 13,
-    marginTop: 4,
+  dividerBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: BORDER,
+  },
+  dividerText: {
+    color: MUTED,
+    fontSize: 12,
+  },
+  guestButton: {
+    backgroundColor: "transparent",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  guestTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  guestSubtitle: {
+    color: MUTED,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  footer: {
+    marginTop: "auto",
+  },
+  footerText: {
+    color: MUTED,
+    fontSize: 12,
+    lineHeight: 17,
   },
 });

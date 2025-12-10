@@ -18,20 +18,34 @@ const MUTED = "#a6b1cc";
 const DANGER = "#ff4b5c";
 
 export default function SettingsScreen() {
-  const { user, signOut, isAuthActionLoading } = useAuth();
+  const { user, signOut, isAuthActionLoading, isGuest } = useAuth();
 
   const handleLogout = async () => {
-  console.log("[Settings] Log Out pressed");
+    Alert.alert(
+      isGuest ? "Exit guest mode" : "Log out",
+      isGuest
+        ? "Exit guest mode and return to the start screen?"
+        : "Are you sure you want to log out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: isGuest ? "Exit guest mode" : "Log out",
+          style: "destructive",
+          onPress: async () => {
+            await signOut();
+          },
+        },
+      ]
+    );
+  };
 
-  try {
-    await signOut();
-    console.log("[Settings] signOut() completed");
-    // Tabs layout + auth layout will see user=null and redirect to /login
-  } catch (err) {
-    console.error("[Settings] signOut() failed:", err);
-  }
-};
+  const primaryLabel = isGuest
+    ? "Guest session (local only)"
+    : user?.email ?? "Unknown user";
 
+  const secondaryText = isGuest
+    ? "You’re using SafeSteps without an account. Location and history stay on this device only."
+    : "Your account uses Supabase Auth. In future versions, this will sync trusted contacts and history securely across devices.";
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -40,31 +54,33 @@ export default function SettingsScreen() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Account</Text>
-          <Text style={styles.label}>Signed in as</Text>
-          <Text style={styles.value}>
-            {user?.email ?? "Unknown user (no email)"}
-          </Text>
+          <Text style={styles.label}>Status</Text>
+          <Text style={styles.value}>{primaryLabel}</Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Data & Safety</Text>
           <Text style={styles.bodyText}>
-            SafeSteps only uses your location to create pings you control.
-            Future versions will include a detailed “How your data is handled”
-            page here.
+            SafeSteps only sends pings you explicitly enable.
+          </Text>
+          <Text style={[styles.bodyText, { marginTop: 6 }]}>
+            {secondaryText}
           </Text>
         </View>
 
         <Pressable
-          // ⚠️ For now we ignore isAuthActionLoading so we can prove the press works
-          style={[
-            styles.logoutButton,
-            isAuthActionLoading && styles.disabled, // just visual
-          ]}
+          style={[styles.logoutButton, isAuthActionLoading && styles.disabled]}
           onPress={handleLogout}
+          disabled={isAuthActionLoading}
         >
           <Text style={styles.logoutText}>
-            {isAuthActionLoading ? "Logging out..." : "Log Out"}
+            {isAuthActionLoading
+              ? isGuest
+                ? "Exiting…"
+                : "Logging out..."
+              : isGuest
+              ? "Exit Guest Mode"
+              : "Log Out"}
           </Text>
         </Pressable>
       </View>
