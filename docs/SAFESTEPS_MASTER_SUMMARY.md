@@ -1,7 +1,5 @@
 # SafeSteps – Master Summary
 
-
-
 ## 1. Vision
 
 SafeSteps is a **privacy-first personal safety app** that lets people:
@@ -45,20 +43,33 @@ Core principles:
   - In-memory session for web
 - ✅ `AuthProvider` + `useAuth` hook:
   - `user`, `session`
-  - `signIn`, `signUp`, `signOut`
+  - `guestMode` (guest session support)
+  - Derived flags: `isGuest`, `isAuthenticated`, `hasSession`
+  - `signInWithEmail`, `signUpWithEmail`, `signOut`
   - `isAuthActionLoading`
+- ✅ Route protection (global):
+  - Root `app/_layout.tsx` uses `hasSession` to decide:
+    - No session → `(auth)` group (login/register)
+    - Guest or authenticated session → `(tabs)` group (main app)
+  - Also forces URL:
+    - No session → `/login`
+    - Has session → `/home`
+- ✅ Guest Mode:
+  - “Continue as Guest” on login screen
+  - Guest session uses local-only mode (no backend yet)
+  - Settings shows guest status and “Exit Guest Mode”
 - ✅ Settings screen:
-  - Shows signed-in email
-  - Working **Logout** calling `signOut()` and returning to auth screens
+  - Shows signed-in email **or** guest session label
+  - Working **Logout / Exit Guest Mode** calling `signOut()` and returning to auth flow
 
 **In-progress / next**
 
-- 🔜 Route protection:
-  - Unauthenticated → forced into `(auth)`
-  - Authenticated → forced into `(tabs)`
 - 🔜 Home screen:
-  - “Welcome, {email}”
+  - “Welcome, {email or Guest}”
   - Basic tracking status card (no real GPS yet)
+- 🔜 Database + backend wiring for:
+  - `location_pings`
+  - `trusted_contacts`
 
 ---
 
@@ -69,13 +80,31 @@ Core principles:
 - **Framework**: Expo + React Native + Expo Router
 - **Language**: TypeScript
 - **Navigation**:
+  - Root layout: `app/_layout.tsx`
+    - Wraps app in `AuthProvider`
+    - Uses `hasSession` (from `useAuth`) to route:
+      - No session → `(auth)` with `/login`
+      - Guest or user → `(tabs)` with `/home`
   - Auth group: `app/(auth)/…`
+    - `login.tsx`
+    - `register.tsx`
   - Tabs group: `app/(tabs)/…`
-  - Root layout decides whether to show auth or tabs based on `user` from `AuthProvider`
+    - `home.tsx`
+    - `contacts.tsx`
+    - `history.tsx`
+    - `settings.tsx`
 - **State / Auth**:
-  - `AuthProvider` wraps the app
+  - `AuthProvider` wraps the whole app
   - Uses Supabase client + SecureStore
-  - Provides session and auth actions via `useAuth()`
+  - Tracks:
+    - Supabase `user` and `session`
+    - `guestMode` flag for guest sessions
+    - Derived flags: `isGuest`, `isAuthenticated`, `hasSession`
+  - Exposes auth actions:
+    - `signInWithEmail`
+    - `signUpWithEmail`
+    - `signOut`
+    - `startGuestSession` / `endGuestSession`
 
 ### 3.2 Backend (planned)
 
@@ -112,6 +141,9 @@ RLS enforced:
 1. Auth:
    - Email/password login & register
    - Logout
+   - **Guest mode**:
+     - Continue as Guest (local-only usage)
+     - Upgrade path to account later
 2. Home:
    - Centered map with blue dot (user location)
    - Status: Off / Active Tracking / Emergency Mode
@@ -129,8 +161,8 @@ RLS enforced:
      - Type (normal/emergency)
    - Emergency pings visually highlighted
 5. Settings:
-   - Signed-in email
-   - Logout
+   - Signed-in email **or** guest session label
+   - Logout / Exit Guest Mode
    - Data & Safety text
 
 **Non-goals for v1**
@@ -184,16 +216,19 @@ See `docs/DESIGN_GUIDE.md` for full design spec.
 
 **Current step:**
 
-- Step 4 – Route protection & Home welcome card.
+- Guest mode + route protection implemented.
+- Working login/register + logout/exit guest in Settings.
+- Next focus: **Home screen UX** for solo user and guest vs signed-in states.
 
 **Next milestones:**
 
-1. Implement proper route protection in root layout.
-2. Build Home screen:
-   - “Welcome, {email}”
+1. Build Home screen:
+   - “Welcome, {email}” (or “Welcome, Guest”)
    - Tracking mode status card (stub)
-3. Design DB schema in Supabase for `trusted_contacts` and `location_pings`.
-4. Build Express backend and wire first API endpoints.
+   - Buttons to navigate toward future tracking/emergency flows
+2. Design DB schema in Supabase for `trusted_contacts` and `location_pings`.
+3. Build Express backend and wire first API endpoints.
+4. Decide local-only vs cloud-backed behavior differences for guest vs authenticated users.
 
 ---
 
