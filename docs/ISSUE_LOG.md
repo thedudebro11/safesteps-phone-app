@@ -1,0 +1,173 @@
+1. Login: CORS blocking Supabase Auth request (500 errors in web)
+
+Symptom:
+POST /auth/v1/token blocked by CORS, no Access-Control-Allow-Origin.
+
+Cause:
+Web build hitting Supabase Auth from Expo web without correct origin config.
+
+Fix:
+
+Configure Supabase → Authentication → URL settings
+
+Add development origin (http://localhost:8081)
+
+Restart dev server
+
+Status: Resolved.
+
+2. Stale react-server-dom-webpack entry in package-lock.json (false positive vulnerability concern)
+
+Symptom:
+You saw react-server-dom-webpack inside lockfile, worried about the React CVE.
+
+Cause:
+Stale metadata in lockfile from internal deps, not actually installed.
+
+Fix:
+
+rm -rf node_modules package-lock.json
+
+Reinstall
+
+Verified not in dependency tree (npm ls, npm why)
+
+Status: Resolved.
+
+3. Logout button not working (no console log, no state change)
+
+Symptom:
+Tapping Logout did nothing.
+
+Root cause:
+onPress wasn’t firing due to shadowed Pressable + no console output.
+
+Fix:
+
+Added console log
+
+Ensured correct function reference
+
+Confirmed signOut() executed
+
+Verified route protection working
+
+Status: Resolved.
+
+4. Guest mode not routing to Home reliably
+
+Symptom:
+Guest mode worked once or twice, then stopped updating the screen.
+
+Cause:
+hasSession didn’t change after first guest attempt → router didn’t rerun navigation logic.
+
+Fix:
+
+Added explicit router.replace("/home") inside handleGuest()
+
+Moved route gating into root _layout.tsx
+
+Status: Resolved.
+
+5. Tabs layout not recognized: “No route named '(tabs)' exists”
+
+Symptom:
+When pressing Guest, error logged:
+
+No route named "(tabs)" exists in nested children: ['login', 'register']
+
+
+Cause:
+Auth gating was placed inside app/(auth)/_layout.tsx instead of the root app _layout.tsx.
+
+Fix:
+
+Root layout now manages routing
+
+Auth layout simplified to stack-only
+
+Tabs layout unaffected
+
+Status: Resolved.
+
+6. Register screen failing: “signUp does not exist on AuthContextValue”
+
+Symptom:
+TypeScript error on signUp.
+
+Cause:
+Refactor renamed signUp → signUpWithEmail.
+
+Fix:
+Updated register screen to use new API.
+
+Status: Resolved.
+
+7. “isInitialLoading” not found on AuthContextValue
+
+Symptom:
+TS error: property missing.
+
+Cause:
+Old tutorial code referencing previous state names.
+
+Fix:
+Correct variable is isAuthLoaded.
+
+Status: Resolved.
+
+8. Web build opening directly to /home instead of auth screen
+
+Symptom:
+Opening a new browser tab skipped login and went straight to Home.
+
+Cause:
+Auth gating not applied globally — was inside (auth) layout only.
+
+Fix:
+
+Centralized route logic in root layout
+
+Added router.replace("/login") when no session present
+
+Status: Resolved.
+
+9. “Continue as Guest” from login → doesn’t refresh screen
+
+Symptom:
+Pressing guest again after navigating once didn’t update the UI.
+
+Cause:
+State didn’t change → React didn’t rerun rerouting logic.
+
+Fix:
+Force router navigation with:
+
+router.replace("/home");
+
+
+Status: Resolved.
+
+### 2025-12-10 — Investigated CVE-2025-55182 (React Server RCE)
+
+ISSUE:
+Found references to "react-server-dom-webpack" inside package-lock.json.
+Concern that SafeSteps may be affected by CVE-2025-55182 (React Server Functions RCE).
+
+INVESTIGATION:
+- Ran `npm ls react-server-dom-webpack`: (empty) → not installed.
+- Ran `npm why react-server-dom-webpack`: no dependencies found.
+- Deleted node_modules + lockfile and reinstalled clean.
+- Verified again: package not in dependency tree.
+- Searched codebase for any RSC / react-server imports → none found.
+- Verified SafeSteps does NOT use Next.js App Router, React Server Components, or Server Actions.
+- Ran `npm audit`: 0 vulnerabilities.
+
+CONCLUSION:
+SafeSteps is **not** affected. The entry in package-lock.json was a **stale metadata reference**, not an active dependency. No server code in SafeSteps uses the vulnerable RSC / Flight protocol.
+
+ACTION TAKEN:
+- No patches needed for SafeSteps frontend.
+- Confirmed backend (Express) does not use React Server Functions.
+- Added documentation here for future audits.
