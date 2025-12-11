@@ -20,10 +20,11 @@ Format: Keep a running **[Unreleased]** section, and cut releases when versions 
 - N/A
 
 ### Fixed
-- N/A
+- Logout / Exit Guest Mode from the Settings screen now reliably clears auth/guest state and redirects back to `/login` on web and native.
 
 ---
 
 ## [0.1.0] – (pre-v1 internal)
 > Placeholder for first internal milestone.
 - Project initialized
+

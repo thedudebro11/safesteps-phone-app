@@ -171,3 +171,60 @@ ACTION TAKEN:
 - No patches needed for SafeSteps frontend.
 - Confirmed backend (Express) does not use React Server Functions.
 - Added documentation here for future audits.
+
+
+## 2025-12-11 — Logout / Exit Guest Mode Does Not Return to Login on Web
+
+### Problem
+
+On Expo web, tapping **“Log Out”** or **“Exit Guest Mode”** on the Settings screen showed no navigation change.  
+The console showed the button `onPress` firing, but the app stayed on `/settings` and the session sometimes remained in an inconsistent state.
+
+### Context
+
+- Screen: `app/(tabs)/settings.tsx`
+- Environment: Expo web (`platform=web`) at `http://localhost:8081`
+- Using `useAuth()` for `signOut` and guest mode handling
+- Root `app/_layout.tsx` already uses `hasSession` to route between `(auth)` and `(tabs)` groups
+
+### Root Cause
+
+The confirmation flow used `Alert.alert(...)` and put the real `signOut()` / guest-exit logic inside the destructive action’s `onPress` callback.
+
+On web, that callback was not reliably firing, so:
+
+- The **initial button press** log appeared.
+- But `signOut()` and navigation never executed.
+
+This left the UI on `/settings` even when the intent was to log out or exit guest mode.
+
+### Solution
+
+1. Removed the `Alert.alert` confirmation wrapper from `Settings` logout logic on web.
+2. Simplified `handleLogout` to:
+
+   - Log the press for debugging.
+   - Directly call `await signOut()` (or the guest exit path).
+   - Immediately call `router.replace("/login")` after auth state is cleared.
+
+3. Verified in console:
+
+   - `[Settings] Logout button pressed …`
+   - `[Auth] state changed { hasSession: false, isGuest: false, ... }`
+   - `[Settings] signOut() completed, navigating to /login`
+
+4. Confirmed that the root auth gating (based on `hasSession`) still behaves correctly and that explicit `router.replace("/login")` keeps UX deterministic on web.
+
+### Why This Happened
+
+Relying on `Alert.alert` for critical control flow on web made logout behavior dependent on browser-specific dialog handling.  
+When the `onPress` of the destructive Alert action didn’t run, the app silently skipped the important logic.
+
+### How to Prevent This in the Future
+
+- Avoid using `Alert.alert` for **critical auth flows** (logout, account deletion) on web.
+- Prefer a deterministic pattern:
+
+  ```ts
+  await signOut();
+  router.replace("/login");

@@ -47,23 +47,7 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Actions */}
-        <View style={styles.actions}>
-          <Pressable style={styles.primaryButton} onPress={handleLoginPress}>
-            <Text style={styles.primaryButtonText}>Log In / Sign Up</Text>
-          </Pressable>
-
-          <Pressable style={styles.secondaryButton} onPress={handleGuestPress}>
-            <Text style={styles.secondaryButtonText}>
-              Continue as Guest (Demo)
-            </Text>
-          </Pressable>
-
-          <Text style={styles.helperText}>
-            Home tab is wired. Next: contacts, history, settings, and real
-            auth.
-          </Text>
-        </View>
+        
       </View>
     </SafeAreaView>
   );

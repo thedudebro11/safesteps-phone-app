@@ -60,7 +60,7 @@ Core principles:
   - Settings shows guest status and “Exit Guest Mode”
 - ✅ Settings screen:
   - Shows signed-in email **or** guest session label
-  - Working **Logout / Exit Guest Mode** calling `signOut()` and returning to auth flow
+  - Logout / Exit Guest Mode uses signOut() + router.replace("/login") to return to the auth flow on all platforms
 
 **In-progress / next**
 

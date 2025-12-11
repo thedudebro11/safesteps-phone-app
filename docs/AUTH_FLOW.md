@@ -101,3 +101,32 @@ useEffect(() => {
     router.replace("/home");
   }
 }, [isAuthLoaded, hasSession, router]);
+
+
+
+  
+
+---
+
+## 3. `docs/AUTH_FLOW.md`
+
+Add a small subsection describing the **Settings logout flow**, so future-you/agents know it’s explicit now.
+
+Append this under section `## 4. Navigation Logic`:
+
+```md
+### 4.3 Settings Logout / Exit Guest Mode
+
+The Settings screen provides a single destructive action at the bottom:
+
+- Label:
+  - `"Log Out"` when authenticated with Supabase
+  - `"Exit Guest Mode"` when in local-only guest mode
+- Behavior:
+  - Calls `signOut()` from `AuthProvider` (which clears Supabase user, session, and guest flags).
+  - After the promise resolves, **always** runs `router.replace("/login")`.
+
+Notes:
+
+- Root `app/_layout.tsx` already gates routes based on `hasSession` and will keep users in the `(auth)` group once logged out.
+- The explicit `router.replace("/login")` from Settings makes logout behavior deterministic on web and native, and avoids relying on `Alert.alert` callbacks for critical control flow.
