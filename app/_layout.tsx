@@ -3,6 +3,8 @@ import React, { useEffect } from "react";
 import { ActivityIndicator, View, StyleSheet } from "react-native";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { AuthProvider, useAuth } from "@/src/features/auth/AuthProvider";
+import { TrackingProvider } from "@/src/features/tracking/TrackingProvider";
+
 
 function RootNavigator() {
   const { isAuthLoaded, hasSession } = useAuth();
@@ -38,7 +40,9 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
+      <TrackingProvider>
       <RootNavigator />
+      </TrackingProvider>
     </AuthProvider>
   );
 }
