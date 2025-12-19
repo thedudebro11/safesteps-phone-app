@@ -1,7 +1,7 @@
 # SafeSteps
 
 <p align="center">
-  <img src="docs/assets/safesteps-logo.png" alt="SafeSteps Logo" width="120" /> 
+  <img src="docs/assets/safesteps-logo.png" alt="SafeSteps Logo" width="320" />  
 </p>
 
 <p align="center">
