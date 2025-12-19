@@ -86,7 +86,7 @@ Auth actions:
 ### 4.1 Root Layout (`app/_layout.tsx`)
 
 The root layout:
-
+- Login screen now includes a “Create an account” button that navigates to /register for full sign-up.
 - Wraps children in `<AuthProvider>`.
 - Reads `isAuthLoaded` and `hasSession` via `useAuth()`.
 - Uses a `useEffect` to **force the URL** based on auth state:

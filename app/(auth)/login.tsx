@@ -5,11 +5,10 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  Pressable,
   SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
+  Pressable,
 } from "react-native";
+import { router } from "expo-router";
 import { useAuth } from "@/src/features/auth/AuthProvider";
 
 const BG = "#050814";
@@ -17,34 +16,52 @@ const CARD_BG = "#0c1020";
 const BORDER = "#1a2035";
 const ACCENT = "#3896ff";
 const MUTED = "#a6b1cc";
+const DANGER = "#ff4b5c";
 
 export default function LoginScreen() {
-  const { signInWithEmail, isAuthActionLoading, startGuestSession } = useAuth();
+  const {
+    signInWithEmail,
+    startGuestSession,
+    isAuthActionLoading,
+  } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
     if (!email || !password) return;
-    await signInWithEmail(email.trim(), password);
+
+    try {
+      await signInWithEmail(email.trim(), password);
+      // Root layout + hasSession will keep user in tabs,
+      // but this makes it snappy.
+      router.replace("/home");
+    } catch (err) {
+      console.error("[Login] Error during sign in:", err);
+      // You can add a toast/Alert here later
+    }
   };
 
-  const handleGuest = () => {
-    console.log("[Login] Continue as Guest pressed");
-    startGuestSession();
+  const handleGuest = async () => {
+    try {
+      startGuestSession();
+      router.replace("/home");
+    } catch (err) {
+      console.error("[Login] Error starting guest session:", err);
+    }
   };
+
+  const handleGoToRegister = () => {
+    router.push("/register");
+  };
+
+  const disableAuthButtons = isAuthActionLoading;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.select({ ios: "padding", android: undefined })}
-      >
-        <View style={styles.header}>
-          <Text style={styles.title}>SafeSteps</Text>
-          <Text style={styles.subtitle}>
-            Private-by-default safety. No account required to start.
-          </Text>
-        </View>
+      <View style={styles.container}>
+        <Text style={styles.title}>SafeSteps</Text>
+        <Text style={styles.subtitle}>Log in or continue as guest</Text>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Sign in</Text>
@@ -52,58 +69,66 @@ export default function LoginScreen() {
           <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
+            placeholder="you@example.com"
+            placeholderTextColor={MUTED}
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
-            placeholder="you@example.com"
-            placeholderTextColor={MUTED}
           />
 
-          <Text style={styles.label}>Password</Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Password</Text>
           <TextInput
             style={styles.input}
+            placeholder="••••••••"
+            placeholderTextColor={MUTED}
             secureTextEntry
             value={password}
             onChangeText={setPassword}
-            placeholder="••••••••"
-            placeholderTextColor={MUTED}
           />
 
           <Pressable
             style={[
               styles.primaryButton,
-              (!email || !password || isAuthActionLoading) && styles.disabled,
+              disableAuthButtons && styles.disabled,
             ]}
             onPress={handleLogin}
-            disabled={!email || !password || isAuthActionLoading}
+            disabled={disableAuthButtons}
           >
-            <Text style={styles.primaryText}>
-              {isAuthActionLoading ? "Signing in..." : "Sign In"}
+            <Text style={styles.primaryButtonText}>
+              {isAuthActionLoading ? "Signing in…" : "Sign In"}
+            </Text>
+          </Pressable>
+
+          {/* NEW: Sign Up / Create account button */}
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={handleGoToRegister}
+            disabled={disableAuthButtons}
+          >
+            <Text style={styles.secondaryButtonText}>
+              Create an account
             </Text>
           </Pressable>
         </View>
 
-        <View style={styles.dividerBlock}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        <Pressable style={styles.guestButton} onPress={handleGuest}>
-          <Text style={styles.guestTitle}>Continue as Guest</Text>
-          <Text style={styles.guestSubtitle}>
-            No account. Location stays on this device unless you upgrade.
+        <View style={styles.guestCard}>
+          <Text style={styles.guestTitle}>Just want to try it?</Text>
+          <Text style={styles.guestText}>
+            Use SafeSteps in guest mode. Data stays on this device only.
           </Text>
-        </Pressable>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            New here? Open the app as a guest now and create an account later
-            if you want cloud backup, trusted contacts, or family maps.
-          </Text>
+          <Pressable
+            style={styles.guestButton}
+            onPress={handleGuest}
+            disabled={isAuthActionLoading}
+          >
+            <Text style={styles.guestButtonText}>
+              {isAuthActionLoading ? "Starting…" : "Continue as Guest"}
+            </Text>
+          </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -118,18 +143,16 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 16,
   },
-  header: {
-    marginBottom: 8,
-  },
   title: {
     color: "#fff",
     fontSize: 32,
     fontWeight: "800",
+    marginBottom: 4,
   },
   subtitle: {
     color: MUTED,
     fontSize: 14,
-    marginTop: 4,
+    marginBottom: 12,
   },
   card: {
     backgroundColor: CARD_BG,
@@ -148,73 +171,78 @@ const styles = StyleSheet.create({
   label: {
     color: MUTED,
     fontSize: 13,
-    marginTop: 4,
   },
   input: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: BORDER,
+    marginTop: 4,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
     color: "#fff",
+    backgroundColor: "#050814",
     fontSize: 14,
-    marginTop: 4,
   },
   primaryButton: {
-    marginTop: 14,
+    marginTop: 16,
     backgroundColor: ACCENT,
-    borderRadius: 14,
-    paddingVertical: 12,
+    borderRadius: 999,
+    paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  primaryText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  disabled: {
-    opacity: 0.6,
-  },
-  dividerBlock: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 8,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: BORDER,
-  },
-  dividerText: {
-    color: MUTED,
-    fontSize: 12,
-  },
-  guestButton: {
-    backgroundColor: "transparent",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  guestTitle: {
+  primaryButtonText: {
     color: "#fff",
     fontSize: 15,
     fontWeight: "700",
   },
-  guestSubtitle: {
-    color: MUTED,
-    fontSize: 12,
-    marginTop: 2,
+  secondaryButton: {
+    marginTop: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: ACCENT,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  footer: {
-    marginTop: "auto",
+  secondaryButtonText: {
+    color: ACCENT,
+    fontSize: 14,
+    fontWeight: "600",
   },
-  footerText: {
+  guestCard: {
+    marginTop: 20,
+    backgroundColor: "transparent",
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    gap: 8,
+  },
+  guestTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  guestText: {
     color: MUTED,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 13,
+  },
+  guestButton: {
+    marginTop: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: DANGER,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guestButtonText: {
+    color: DANGER,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  disabled: {
+    opacity: 0.6,
   },
 });

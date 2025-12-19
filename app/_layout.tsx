@@ -1,51 +1,38 @@
 // app/_layout.tsx
 import React, { useEffect } from "react";
-import { Stack, useRouter } from "expo-router";
-import {
-  AuthProvider,
-  useAuth,
-} from "@/src/features/auth/AuthProvider";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, View, StyleSheet } from "react-native";
+import { Slot, useRouter, useSegments } from "expo-router";
+import { AuthProvider, useAuth } from "@/src/features/auth/AuthProvider";
 
 function RootNavigator() {
   const { isAuthLoaded, hasSession } = useAuth();
   const router = useRouter();
+  const segments = useSegments();
 
-  // Hard-sync URL with auth state
   useEffect(() => {
     if (!isAuthLoaded) return;
 
-    if (!hasSession) {
-      // No user + not guest → force them to auth
+    const inAuthGroup = segments[0] === "(auth)";
+
+    if (!hasSession && !inAuthGroup) {
+      // No session → force auth stack
       router.replace("/login");
-    } else {
-      // Guest or authenticated user → main app
+    } else if (hasSession && inAuthGroup) {
+      // Have session (guest or user) but stuck in auth → send to tabs
       router.replace("/home");
     }
-  }, [isAuthLoaded, hasSession, router]);
+  }, [isAuthLoaded, hasSession, segments, router]);
 
   if (!isAuthLoaded) {
+    // Simple splash while we figure out auth state
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: "#050814",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
+      <View style={styles.splash}>
         <ActivityIndicator />
       </View>
     );
   }
 
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      {/* Two high-level groups: auth screens and tabs */}
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(tabs)" />
-    </Stack>
-  );
+  return <Slot />;
 }
 
 export default function RootLayout() {
@@ -55,3 +42,12 @@ export default function RootLayout() {
     </AuthProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  splash: {
+    flex: 1,
+    backgroundColor: "#050814",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

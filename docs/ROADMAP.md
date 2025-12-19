@@ -10,7 +10,7 @@
 - [x] Supabase client, env setup
 - [x] AuthProvider with session persistence
 - [x] Logout from Settings
-- [ ] Route protection (auth vs tabs)
+- [x] Route protection (auth vs tabs)
 - [ ] Home “Welcome, {email}” card
 
 ---
