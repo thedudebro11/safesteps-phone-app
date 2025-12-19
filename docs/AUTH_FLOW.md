@@ -1,132 +1,127 @@
-
----
-
-### 2️⃣ `docs/AUTH_FLOW.md`
-
-```md
 # SafeSteps — Authentication & Guest Flow
 
-_Last updated: 2025-12-10_
+_Last updated: 2025-12-11_
+
+This document describes the complete authentication, guest access, and navigation behavior of the SafeSteps mobile application.
+
+It is an authoritative reference for:
+- How auth state is represented
+- How guest mode works
+- How routing decisions are made
+- How logout / exit guest is handled safely on all platforms
+
+---
 
 ## 1. Goals
 
-- Allow new users to use SafeSteps **immediately** without creating an account.
-- Keep architecture ready for:
-  - Family accounts
-  - Cloud sync
-  - Trusted contacts
-  - Premium subscriptions
-- Keep logic simple & auditable:
-  - One source of truth for auth/guest state
-  - Centralized route gating
+- Allow users to use SafeSteps **immediately** without account creation.
+- Support a clean upgrade path from guest → authenticated user.
+- Maintain a simple, auditable auth model:
+  - One source of truth for auth + guest state
+  - Centralized routing logic
+- Ensure deterministic behavior on **native and web**.
 
 ---
 
-## 2. Core Concepts
+## 2. Core Auth Concepts
 
-### 2.1 Supabase User Session
+### 2.1 Authenticated User (Supabase Session)
 
-- Represents a real authenticated account.
-- Provides:
-  - `user.id` (UUID)
-  - `user.email`
-  - Access token (JWT) used when calling backend API.
-- Source of truth for server-side data:
-  - `location_pings`
-  - `trusted_contacts`
-  - Future: family groups, share links, subscriptions, etc.
+An authenticated user is backed by Supabase Auth.
 
-### 2.2 Guest Session
+Provides:
+- `user.id` (UUID)
+- `user.email`
+- Access token (JWT) for backend API calls
 
-- Represented by a **local-only** flag in `AuthProvider`:
-  - `guestMode: boolean`
-- Does **not** have a Supabase user or JWT.
-- Intended for:
-  - Local-only tracking & history
-  - “Try it first, sign up later” UX
+Server-side source of truth for:
+- `location_pings`
+- `trusted_contacts`
+- Future: family groups, share links, subscriptions
+
+---
+
+### 2.2 Guest Session (Local-Only)
+
+A guest session allows immediate use without an account.
+
+Characteristics:
+- Represented by a local-only flag in `AuthProvider`
+- No Supabase user
+- No JWT
+- No backend access
+
+Intended for:
+- Trying the app before signing up
+- Local-only tracking and history
+- Zero server persistence
+
+Guest data is **not synced** and is lost when the guest session ends.
 
 ---
 
 ## 3. AuthProvider API
 
-`src/features/auth/AuthProvider.tsx` exposes:
+`src/features/auth/AuthProvider.tsx` exposes the following state and actions:
 
-- `user: User | null` — Supabase user or `null`
-- `session: Session | null` — Supabase session or `null`
-- `isAuthLoaded: boolean` — true once initial Supabase `getSession()` completes
-- `isAuthActionLoading: boolean` — true while login/signup/logout is in-flight
+### 3.1 State
 
-Guest/session helpers:
+- `user: User | null`
+- `session: Session | null`
+- `guestMode: boolean`
+- `isAuthLoaded: boolean`
+  - `true` once initial Supabase session check completes
+- `isAuthActionLoading: boolean`
+  - `true` while sign-in / sign-up / sign-out is in progress
 
-- `guestMode: boolean` — raw flag for guest mode
-- `startGuestSession(): void`  
-  - Clears Supabase user/session state
-  - Sets `guestMode = true`
-- `endGuestSession(): Promise<void>`  
-  - Sets `guestMode = false`
-
-Derived booleans:
+### 3.2 Derived Flags
 
 - `isAuthenticated = !!user`
 - `isGuest = guestMode && !user`
 - `hasSession = isAuthenticated || isGuest`
 
-Auth actions:
+`hasSession` is the **single source of truth** for route access.
+
+---
+
+### 3.3 Actions
 
 - `signInWithEmail(email, password)`
 - `signUpWithEmail(email, password)`
-- `signOut()`:
-  - If Supabase user exists, calls `supabase.auth.signOut()`
-  - Clears `user`, `session`, and `guestMode`
+- `startGuestSession()`
+  - Clears any Supabase state
+  - Sets `guestMode = true`
+- `signOut()`
+  - If authenticated:
+    - Calls `supabase.auth.signOut()`
+  - Clears:
+    - `user`
+    - `session`
+    - `guestMode`
 
 ---
 
-## 4. Navigation Logic
+## 4. Navigation & Route Protection
 
 ### 4.1 Root Layout (`app/_layout.tsx`)
 
-The root layout:
-- Login screen now includes a “Create an account” button that navigates to /register for full sign-up.
-- Wraps children in `<AuthProvider>`.
-- Reads `isAuthLoaded` and `hasSession` via `useAuth()`.
-- Uses a `useEffect` to **force the URL** based on auth state:
+The root layout is responsible for **all routing decisions**.
+
+Behavior:
+- Wraps the app in `<AuthProvider>`
+- Waits for `isAuthLoaded`
+- Forces navigation based on `hasSession`
+
+Routing rules:
+
+- `hasSession === false` → `/login`
+- `hasSession === true` → `/home`
+
+Implementation pattern:
 
 ```ts
-useEffect(() => {
-  if (!isAuthLoaded) return;
-
-  if (!hasSession) {
-    router.replace("/login");
-  } else {
-    router.replace("/home");
-  }
-}, [isAuthLoaded, hasSession, router]);
-
-
-
-  
-
----
-
-## 3. `docs/AUTH_FLOW.md`
-
-Add a small subsection describing the **Settings logout flow**, so future-you/agents know it’s explicit now.
-
-Append this under section `## 4. Navigation Logic`:
-
-```md
-### 4.3 Settings Logout / Exit Guest Mode
-
-The Settings screen provides a single destructive action at the bottom:
-
-- Label:
-  - `"Log Out"` when authenticated with Supabase
-  - `"Exit Guest Mode"` when in local-only guest mode
-- Behavior:
-  - Calls `signOut()` from `AuthProvider` (which clears Supabase user, session, and guest flags).
-  - After the promise resolves, **always** runs `router.replace("/login")`.
-
-Notes:
-
-- Root `app/_layout.tsx` already gates routes based on `hasSession` and will keep users in the `(auth)` group once logged out.
-- The explicit `router.replace("/login")` from Settings makes logout behavior deterministic on web and native, and avoids relying on `Alert.alert` callbacks for critical control flow.
+if (!hasSession) {
+  router.replace("/login");
+} else {
+  router.replace("/home");
+}

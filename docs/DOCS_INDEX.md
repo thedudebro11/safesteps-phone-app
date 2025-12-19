@@ -108,3 +108,5 @@ These can be added once v1 is stable.
 Documentation is part of the product.  
 If the code changes and the docs don’t, the entire system becomes fragile.  
 Keep docs and code evolving together.
+
+Brand assets: docs/assets/

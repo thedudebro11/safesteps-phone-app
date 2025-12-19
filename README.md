@@ -1,124 +1,134 @@
-# SafeSteps – Privacy-First Personal Safety App
+# SafeSteps
 
-SafeSteps is a **privacy-first GPS safety application** built with Expo + React Native, Supabase, and an Express backend.  
-It allows users to:
+<p align="center">
+  <img src="docs/assets/safesteps-logo.png" alt="SafeSteps Logo" width="120" /> 
+</p>
 
-- Share their live location only when they choose  
-- Enable **Active Tracking** at custom intervals  
-- Trigger **Emergency Mode** with high-frequency pings  
-- Maintain **Trusted Contacts** who can receive emergency alerts  
-- View **Location History** with normal vs emergency ping labeling  
-- Share a **Live Location Link** with anyone (future)  
+<p align="center">
+  <strong>Privacy-first personal safety & location sharing</strong><br />
+  Control when your location is shared. No silent tracking. No dark patterns.
+</p>
 
-SafeSteps focuses on **user control**, **battery efficiency**, and **zero surveillance** — tracking is only active when a user explicitly enables it.
+<p align="center">
+  <img alt="status" src="https://img.shields.io/badge/status-pre--v1-informational" />
+  <img alt="platform" src="https://img.shields.io/badge/platform-ios%20%7C%20android%20%7C%20web-blue" />
+  <img alt="license" src="https://img.shields.io/badge/license-Apache--2.0-green" />
+</p>
 
 ---
 
-## 🚀 Tech Stack
+## Overview
 
-### **Frontend**
-- Expo (React Native)
-- TypeScript
+**SafeSteps** is a privacy-first personal safety app designed to help users share their location **only when they choose**.
+
+The app is built around a simple but strict philosophy:
+
+- No silent background tracking  
+- No third-party analytics  
+- No ad networks  
+- No hidden data reuse  
+- Clear user-controlled states at all times  
+
+Users can:
+- Sign in with an account
+- Try the app instantly using **Guest Mode**
+- Explicitly enable or disable tracking
+- Exit guest mode or log out at any time
+
+SafeSteps prioritizes **clarity, control, and safety over surveillance**.
+
+---
+
+## Project Status
+
+**Pre-v1 — Active Development**
+
+Current state:
+- Auth + Guest flow complete
+- Deterministic route protection implemented
+- Settings + logout behavior stable
+- Documentation-first development process in place
+
+In progress:
+- Home screen tracking UI
+- Location ping storage
+- Backend API wiring
+
+This repository is under active development and **not yet released to app stores**.
+
+---
+
+## Core Features (Current)
+
+- Email/password authentication (Supabase)
+- Guest Mode (local-only usage)
+- Centralized route protection
+- Explicit logout / exit guest behavior
+- Privacy-focused UI and interaction design
+- No background tracking without consent
+
+---
+
+## Tech Stack
+
+**Frontend**
+- Expo
+- React Native
 - Expo Router
-- Supabase JS Client
-- SecureStore (for native session persistence)
+- TypeScript
 
-### **Backend**
-- Node.js + Express
+**Backend (in progress)**
+- Node.js
+- Express
 - Supabase (Auth + Postgres + RLS)
-- JWT verification on all protected routes
 
-### **Database**
-- `trusted_contacts`
-- `location_pings`
-- (Future) `share_links`
-
----
-
-## 📁 Project Structure (Simplified)
-
-/app
-(auth)/
-(tabs)/
-_layout.tsx
-index.tsx
-
-/src
-features/
-auth/
-tracking/
-contacts/
-history/
-lib/
-supabase.ts
-
-/server
-src/
-routes/
-services/
-middleware/
-config/
-
-docs/
-SAFESTEPS_MASTER_SUMMARY.md
-ROADMAP.md
-CHANGELOG.md
-DESIGN_GUIDE.md
-ISSUE_LOG.md
-...
-
+**Philosophy**
+- Privacy-first by default
+- Minimal attack surface
+- Deterministic state transitions
 
 ---
 
-## 📘 Documentation
+## Authentication Model
 
-All major documentation files are kept under `/docs`.
+SafeSteps supports two session types:
 
-See **DOCS_INDEX.md** for a master directory of all documentation.
+### Authenticated User
+- Backed by Supabase Auth
+- Cloud-synced data (future)
+- Secure JWT-based API access
+
+### Guest Mode
+- Local-only
+- No backend writes
+- No JWT
+- Ideal for “try before signup”
+
+Both are treated as valid sessions for routing purposes.
+
+For full details, see:  
+📄 `docs/AUTH_FLOW.md`
 
 ---
 
-## 🧪 Development
+## Documentation
 
-### Start the mobile app:
+This project treats documentation as part of the system.
+
+Start here:
+
+- `docs/SAFESTEPS_MASTER_SUMMARY.md` — project brain
+- `docs/AUTH_FLOW.md` — auth & guest logic
+- `docs/ROADMAP.md` — planned milestones
+- `docs/ISSUE_LOG.md` — full debugging history
+- `docs/SECURITY_NOTES.md` — security decisions & audits
+
+Docs are kept in sync with code.
+
+---
+
+## Running the App
+
+```bash
+npm install
 npx expo start
-
-
-### Start the backend (once generated):
-npm run dev
-
-
-### TypeScript checks:
-npm run typecheck
-
-## 🛡 Privacy Philosophy
-
-SafeSteps does *not* require “Always-Allow Location.”  
-It only tracks when:
-
-- User activates **Active Tracking**, or  
-- User activates **Emergency Mode**  
-
-No background tracking is forced.  
-No analytics SDKs.  
-No silent data collection.  
-
----
-
-## 🧭 Roadmap
-
-See `docs/ROADMAP.md`.
-
----
-
-## 💬 Issues
-
-If you encounter problems or architectural decisions, log them in:
-
-`docs/ISSUE_LOG.md`
-
----
-
-## 📝 License
-
-SafeSteps is owned by the creator. License TBD.
