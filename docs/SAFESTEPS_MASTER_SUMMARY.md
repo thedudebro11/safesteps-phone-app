@@ -62,16 +62,26 @@ Core principles:
   - Shows signed-in email **or** guest session label
   - Logout / Exit Guest Mode uses signOut() + router.replace("/login") to return to the auth flow on all platforms
 
-**In-progress / next**
+### 🔜 Next Priority Work
+1) Home screen:
+- Welcome card (email/guest)
+- Active Tracking toggle + frequency
+- Emergency Mode control (override logic)
 
-- 🔜 Home screen:
-  - “Welcome, {email or Guest}”
-  - Basic tracking status card (no real GPS yet)
-- 🔜 Database + backend wiring for:
-  - `location_pings`
-  - `trusted_contacts`
+2) Location capture pipeline:
+- Foreground GPS capture
+- State machine + timer safety
 
----
+3) Backend + DB:
+- Persist pings
+- Read history
+
+4) Sharing (Option B, v1):
+- Recipient-specific share links
+- Explicit expiration
+- On/off state
+- Share viewer route
+- Token hashing + rate limiting
 
 ## 3. Architecture Overview
 
