@@ -175,6 +175,38 @@ RLS enforced:
    - Logout / Exit Guest Mode
    - Data & Safety text
 
+## Session Modes & Sharing Truths (Authoritative)
+
+SafeSteps supports two session types:
+
+- **Authenticated (Supabase)**: user has a real account + JWT. Data can be stored and fetched from the backend.
+- **Guest (local-only)**: user has no Supabase identity. Tracking/history stay on device by default.
+
+### The Golden Rule
+**Guest data stays local unless the user explicitly enables sharing.**
+
+### Share Links (v1 Signature Feature)
+SafeSteps supports secure live-location sharing with:
+
+- Explicit expiration
+- Explicit recipients (recipient-specific links)
+- Clear on/off state (pause or revoke instantly)
+
+#### Guest Sharing (Ephemeral Relay Model)
+Guest users can still share, but sharing requires a server relay:
+
+- The trusted contact **cannot** read data directly from the guest’s phone.
+- When a guest starts sharing, SafeSteps temporarily sends **only the minimum live location snapshot** to the server for the duration of the share session.
+- The server enforces:
+  - expiration
+  - active/paused state
+  - per-recipient revocation
+- When sharing ends (expired or turned off), server-side share data is deleted and links become invalid.
+
+#### Authenticated Sharing
+Authenticated users can share through the same share session system, but are eligible for richer server-backed features later (history windows, multi-device sync, etc.) while still honoring explicit consent and revocation.
+
+
 **Non-goals for v1**
 
 - Full-blown background tracking (optional/experimental only)

@@ -72,6 +72,21 @@
 - [ ] Basic battery/performance tuning
 
 ---
+### Sharing (v1 signature feature, Option B)
+
+Implement recipient-scoped live sharing:
+
+- Share sessions have:
+  - explicit expiration
+  - explicit on/off state
+- Links are per-recipient (one link per recipient)
+- Tokens are stored hashed (no raw tokens in DB)
+- Share viewer endpoint is public but rate-limited and minimal-data
+
+Guest support:
+- Guest mode remains local-only by default.
+- When a guest starts sharing, the server temporarily stores only the minimum live snapshot needed to serve the viewer until expiration/off, then deletes it.
+
 
 ## Stage 3 – v2 (Family / Circles)
 

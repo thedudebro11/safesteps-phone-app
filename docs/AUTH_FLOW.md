@@ -59,6 +59,20 @@ Intended for:
 Guest data is **not synced** and is lost when the guest session ends.
 
 ---
+## Guest Sharing Behavior (v1)
+
+Guest mode is local-only **by default**.
+
+However, share links require a server to be usable and enforceable. Therefore:
+
+- Guest tracking/history remains on device.
+- If the user explicitly enables sharing, the app temporarily relays the **minimum required live location snapshot** to the server until:
+  - the share expires, or
+  - the user turns sharing off, or
+  - a recipient link is revoked.
+- After the share ends, links are invalid and share data is deleted.
+
+
 
 ## 3. AuthProvider API
 

@@ -20,6 +20,7 @@ Format: Keep a running **[Unreleased]** section, and cut releases when versions 
 
 ### Changed
 - “Added Home Welcome card showing session identity (guest vs signed in).”
+- Defined v1 share link model: recipient-scoped links with expiration and on/off; guest sharing uses ephemeral server relay (minimum live snapshot, deleted on end).
 
 ### Fixed
 - Logout / Exit Guest Mode from the Settings screen now reliably clears auth/guest state and redirects back to `/login` on web and native.
