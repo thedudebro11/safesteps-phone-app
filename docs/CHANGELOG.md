@@ -19,7 +19,7 @@ Format: Keep a running **[Unreleased]** section, and cut releases when versions 
 - “Create an account” button on the login screen linking to the register flow.
 
 ### Changed
-- N/A
+- “Added Home Welcome card showing session identity (guest vs signed in).”
 
 ### Fixed
 - Logout / Exit Guest Mode from the Settings screen now reliably clears auth/guest state and redirects back to `/login` on web and native.

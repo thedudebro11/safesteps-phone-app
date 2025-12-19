@@ -1,63 +1,92 @@
 // app/(tabs)/home.tsx
-
 import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  SafeAreaView,
-} from "react-native";
+import { View, Text, StyleSheet, SafeAreaView } from "react-native";
+import { useAuth } from "@/src/features/auth/AuthProvider";
 
-import { useRouter } from "expo-router";
-
-const router = useRouter();
+const BG = "#050814";
+const CARD_BG = "#0c1020";
+const BORDER = "#1a2035";
+const ACCENT = "#3896ff";
+const MUTED = "#a6b1cc";
+const DANGER = "#ff4b5c";
 
 export default function HomeScreen() {
-  const handleLoginPress = () => {
-  router.push("/login");
-}
+  const { user, isGuest, hasSession, isAuthLoaded } = useAuth();
 
+  // Home should never render without a session because root gating redirects,
+  // but this keeps the UI sane during dev edge cases.
+  if (!isAuthLoaded) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={[styles.card, styles.skeletonCard]} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
+  if (!hasSession) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>SafeSteps</Text>
+            <Text style={styles.bodyText}>
+              Session not found. You should be redirected to login.
+            </Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
+  const primaryLabel = isGuest
+    ? "Guest session"
+    : user?.email ?? "Signed in";
 
-  const handleGuestPress = () => {
-    console.log("Continue as Guest pressed");
-    // later: set demo mode / skip auth
-  };
+  const badgeText = isGuest ? "LOCAL ONLY" : "SIGNED IN";
+  const badgeStyle = isGuest ? styles.badgeGuest : styles.badgeAuthed;
+
+  const secondaryText = isGuest
+    ? "Your location and history stay on this device. Sharing and cloud sync require an account."
+    : "You’re signed in. Your account will securely sync history, trusted contacts, and sharing sessions.";
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Header / Branding */}
-        <View style={styles.header}>
-          <Text style={styles.appName}>SafeSteps</Text>
-          <Text style={styles.tagline}>
-            Privacy-first live tracking & emergency alerts.
-          </Text>
-        </View>
-
-        {/* Status Card */}
+        {/* Persistent Welcome Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Tracking Status</Text>
-          <Text style={styles.cardSubtitle}>No active tracking.</Text>
-          <Text style={styles.cardBody}>
-            Start Active Tracking to send encrypted location pings to your
-            trusted contacts, or trigger Emergency Mode when you feel unsafe.
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Welcome</Text>
+            <View style={[styles.badge, badgeStyle]}>
+              <Text style={styles.badgeText}>{badgeText}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.value}>{primaryLabel}</Text>
+          <Text style={styles.bodyText}>{secondaryText}</Text>
+        </View>
+
+        {/* Placeholder for next v1 controls */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Tracking</Text>
+          <Text style={styles.bodyText}>
+            Next: Active Tracking toggle, ping frequency, and Emergency Mode.
           </Text>
         </View>
 
-        
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Sharing</Text>
+          <Text style={styles.bodyText}>
+            v1 includes secure share links with expiration, recipients, and on/off state.
+          </Text>
+        </View>
+
+        <View style={styles.spacer} />
       </View>
     </SafeAreaView>
   );
 }
-
-const ACCENT = "#3896ff";
-const BG = "#050814";
-const CARD_BG = "#0c1020";
-const BORDER = "#1a2035";
-const MUTED = "#a6b1cc";
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -66,89 +95,63 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 24,
-    backgroundColor: BG,
-    justifyContent: "space-between",
-  },
-  header: {
-    gap: 8,
-    marginTop: 12,
-  },
-  appName: {
-    fontSize: 32,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: "#ffffff",
-  },
-  tagline: {
-    fontSize: 14,
-    color: MUTED,
-    lineHeight: 20,
+    padding: 20,
+    gap: 16,
   },
   card: {
     backgroundColor: CARD_BG,
     borderRadius: 18,
-    padding: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: BORDER,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-    gap: 6,
+    gap: 8,
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#ffffff",
+  skeletonCard: {
+    height: 120,
+    opacity: 0.5,
   },
-  cardSubtitle: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: ACCENT,
-  },
-  cardBody: {
-    fontSize: 13,
-    color: MUTED,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  actions: {
+  cardHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
   },
-  primaryButton: {
-    backgroundColor: ACCENT,
-    borderRadius: 999,
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryButtonText: {
-    color: "#ffffff",
+  cardTitle: {
+    color: "#fff",
     fontSize: 16,
     fontWeight: "700",
   },
-  secondaryButton: {
-    backgroundColor: "transparent",
+  value: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  bodyText: {
+    color: MUTED,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
-    paddingVertical: 13,
-    alignItems: "center",
-    justifyContent: "center",
     borderWidth: 1,
-    borderColor: BORDER,
   },
-  secondaryButtonText: {
-    color: MUTED,
-    fontSize: 14,
-    fontWeight: "600",
+  badgeAuthed: {
+    borderColor: ACCENT,
+    backgroundColor: "rgba(56,150,255,0.14)",
   },
-  helperText: {
-    textAlign: "center",
-    fontSize: 12,
-    color: MUTED,
-    marginTop: 4,
+  badgeGuest: {
+    borderColor: DANGER,
+    backgroundColor: "rgba(255,75,92,0.10)",
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+  },
+  spacer: {
+    flex: 1,
   },
 });

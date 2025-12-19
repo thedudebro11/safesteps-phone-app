@@ -11,7 +11,7 @@
 - [x] AuthProvider with session persistence
 - [x] Logout from Settings
 - [x] Route protection (auth vs tabs)
-- [ ] Home “Welcome, {email}” card
+- [x] Home “Welcome, {email}” card
 
 ---
 
