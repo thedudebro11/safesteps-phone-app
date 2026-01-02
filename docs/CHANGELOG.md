@@ -76,3 +76,11 @@ Format: Maintain **[Unreleased]**, cut releases when versions are tagged.
 
 ## [0.1.0] — pre-v1 internal
 - Project initialized
+
+
+## [Unreleased]
+### Added
+- Local-first Contacts + Shares domain layer (Context providers)
+- Storage adapter (web localStorage, native AsyncStorage, fallback in-memory)
+- Shares tab + sessions UI
+- Cross-platform confirm helper for web/native destructive actions

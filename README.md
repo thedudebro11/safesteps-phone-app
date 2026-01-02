@@ -58,6 +58,24 @@ This repository is under active development and **not yet released to app stores
 
 ---
 
+### What’s implemented (this update)
+
+✅ Trusted Contacts (local-first)
+- Add / remove contacts (name, optional phone/email)
+- Stored locally (Web: localStorage, Native: AsyncStorage if installed)
+
+✅ Share Sessions (local-first)
+- Create a “share session” for a contact
+- One active share per contact
+- End share from **Contacts** or **Shares**
+- Sessions stored locally (same storage rules)
+
+✅ UX flow
+- Home → “Share Live Location” → navigates to Contacts in share mode (`/contacts?share=1`)
+- Contacts show SHARING indicator per active session
+- Shares tab lists active sessions + End action
+- Destructive actions use a cross-platform confirm (works on Web + Native)
+
 ## Core Features (Current)
 
 - Email/password authentication (Supabase)
@@ -76,6 +94,11 @@ This repository is under active development and **not yet released to app stores
 - React Native
 - Expo Router
 - TypeScript
+- Local-first state via Context Providers
+- Storage adapter:
+  - Web: localStorage
+  - Native: `@react-native-async-storage/async-storage` (optional, recommended)
+  - Fallback: in-memory (still functional)
 
 **Backend (in progress)**
 - Node.js
@@ -127,8 +150,44 @@ Docs are kept in sync with code.
 
 ---
 
+Data Models
+Contact
+type Contact = {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  createdAt: string;
+};
+
+ShareSession
+type ShareSession = {
+  id: string;
+  contactId: string;
+  contactSnapshot: { name: string; phone?: string; email?: string };
+  status: "live" | "ended";
+  startedAt: string;
+  endedAt?: string;
+};
+
+
+Why snapshot?
+
+Contacts can change, but share sessions should preserve what was shared at the time.
+
+
+
+
+Web persistence works automatically using localStorage.
+
 ## Running the App
 
 ```bash
 npm install
 npx expo start
+Installation Notes (important)
+Native persistence (recommended)
+
+For iOS/Android persistence across app restarts, install AsyncStorage:
+
+npx expo install @react-native-async-storage/async-storage

@@ -39,6 +39,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="shares"
+        options={{
+          title: "Shares",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="share-social-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           title: "History",
