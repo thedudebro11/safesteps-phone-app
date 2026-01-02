@@ -4,6 +4,8 @@ import { View, Text, StyleSheet, SafeAreaView } from "react-native";
 import { useAuth } from "@/src/features/auth/AuthProvider";
 import { Pressable } from "react-native";
 import { useTracking } from "@/src/features/tracking/TrackingProvider";
+import { useRouter } from "expo-router";
+
 
 
 const BG = "#050814";
@@ -16,19 +18,20 @@ const DANGER = "#ff4b5c";
 
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { user, isGuest, hasSession, isAuthLoaded } = useAuth();
   const {
-  mode,
-  frequencySec,
-  lastPingAt,
-  lastError,
-  setFrequency,
-  startActive,
-  stopActive,
-  startEmergency,
-  stopEmergency,
-  pingOnce,
-} = useTracking();
+    mode,
+    frequencySec,
+    lastPingAt,
+    lastError,
+    setFrequency,
+    startActive,
+    stopActive,
+    startEmergency,
+    stopEmergency,
+    pingOnce,
+  } = useTracking();
 
 
   // Home should never render without a session because root gating redirects,
@@ -87,83 +90,87 @@ export default function HomeScreen() {
 
         {/* Placeholder for next v1 controls */}
         <View style={styles.card}>
-  <Text style={styles.cardTitle}>Tracking</Text>
+          <Text style={styles.cardTitle}>Tracking</Text>
 
-  <Text style={styles.bodyText}>
-    Status:{" "}
-    <Text style={{ color: "#fff", fontWeight: "800" }}>
-      {mode === "idle" ? "OFF" : mode === "active" ? "ACTIVE" : "EMERGENCY"}
-    </Text>
-  </Text>
-
-  <Text style={[styles.bodyText, { marginTop: 6 }]}>
-    Frequency:{" "}
-    <Text style={{ color: "#fff", fontWeight: "800" }}>
-      {mode === "emergency" ? "30s (fixed)" : frequencySec === 30 ? "30s" : frequencySec === 60 ? "1m" : "5m"}
-    </Text>
-  </Text>
-
-  {mode !== "emergency" && (
-    <View style={{ flexDirection: "row", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-      {[30, 60, 300].map((sec) => {
-        const active = frequencySec === sec;
-        return (
-          <Pressable
-            key={sec}
-            onPress={() => setFrequency(sec as any)}
-            style={[
-              styles.pill,
-              active && { borderColor: ACCENT, backgroundColor: "rgba(56,150,255,0.14)" },
-            ]}
-          >
-            <Text style={[styles.pillText, active && { color: "#fff" }]}>
-              {sec === 30 ? "30s" : sec === 60 ? "1m" : "5m"}
+          <Text style={styles.bodyText}>
+            Status:{" "}
+            <Text style={{ color: "#fff", fontWeight: "800" }}>
+              {mode === "idle" ? "OFF" : mode === "active" ? "ACTIVE" : "EMERGENCY"}
             </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  )}
+          </Text>
 
-  <View style={{ flexDirection: "row", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-    {mode === "active" ? (
-      <Pressable style={[styles.actionBtn, styles.btnOutline]} onPress={stopActive}>
-        <Text style={styles.btnOutlineText}>Stop Active</Text>
-      </Pressable>
-    ) : (
-      <Pressable style={[styles.actionBtn, styles.btnPrimary]} onPress={startActive} disabled={mode === "emergency"}>
-        <Text style={styles.btnPrimaryText}>Start Active</Text>
-      </Pressable>
-    )}
+          <Text style={[styles.bodyText, { marginTop: 6 }]}>
+            Frequency:{" "}
+            <Text style={{ color: "#fff", fontWeight: "800" }}>
+              {mode === "emergency" ? "30s (fixed)" : frequencySec === 30 ? "30s" : frequencySec === 60 ? "1m" : "5m"}
+            </Text>
+          </Text>
 
-    {mode === "emergency" ? (
-      <Pressable style={[styles.actionBtn, styles.btnDanger]} onPress={stopEmergency}>
-        <Text style={styles.btnDangerText}>Stop Emergency</Text>
-      </Pressable>
-    ) : (
-      <Pressable style={[styles.actionBtn, styles.btnDanger]} onPress={startEmergency}>
-        <Text style={styles.btnDangerText}>Emergency</Text>
-      </Pressable>
-    )}
+          {mode !== "emergency" && (
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+              {[30, 60, 300].map((sec) => {
+                const active = frequencySec === sec;
+                return (
+                  <Pressable
+                    key={sec}
+                    onPress={() => setFrequency(sec as any)}
+                    style={[
+                      styles.pill,
+                      active && { borderColor: ACCENT, backgroundColor: "rgba(56,150,255,0.14)" },
+                    ]}
+                  >
+                    <Text style={[styles.pillText, active && { color: "#fff" }]}>
+                      {sec === 30 ? "30s" : sec === 60 ? "1m" : "5m"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
 
-    <Pressable style={[styles.actionBtn, styles.btnOutline]} onPress={pingOnce}>
-      <Text style={styles.btnOutlineText}>Ping Now</Text>
-    </Pressable>
-  </View>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+            {mode === "active" ? (
+              <Pressable style={[styles.actionBtn, styles.btnOutline]} onPress={stopActive}>
+                <Text style={styles.btnOutlineText}>Stop Active</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={[styles.actionBtn, styles.btnPrimary]} onPress={startActive} disabled={mode === "emergency"}>
+                <Text style={styles.btnPrimaryText}>Start Active</Text>
+              </Pressable>
+            )}
 
-  <Text style={[styles.bodyText, { marginTop: 10 }]}>
-    Last ping:{" "}
-    <Text style={{ color: "#fff", fontWeight: "700" }}>
-      {lastPingAt ? new Date(lastPingAt).toLocaleTimeString() : "—"}
-    </Text>
-  </Text>
+            {mode === "emergency" ? (
+              <Pressable style={[styles.actionBtn, styles.btnDanger]} onPress={stopEmergency}>
+                <Text style={styles.btnDangerText}>Stop Emergency</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={[styles.actionBtn, styles.btnDanger]} onPress={startEmergency}>
+                <Text style={styles.btnDangerText}>Emergency</Text>
+              </Pressable>
+            )}
 
-  {!!lastError && (
-    <Text style={[styles.bodyText, { marginTop: 6, color: DANGER }]}>
-      {lastError}
-    </Text>
-  )}
-</View>
+            <Pressable
+              style={[styles.actionBtn, styles.btnOutline]}
+              onPress={() => router.push("/contacts?share=1")}
+            >
+              <Text style={styles.btnOutlineText}>Share Live Location</Text>
+            </Pressable>
+
+          </View>
+
+          <Text style={[styles.bodyText, { marginTop: 10 }]}>
+            Last ping:{" "}
+            <Text style={{ color: "#fff", fontWeight: "700" }}>
+              {lastPingAt ? new Date(lastPingAt).toLocaleTimeString() : "—"}
+            </Text>
+          </Text>
+
+          {!!lastError && (
+            <Text style={[styles.bodyText, { marginTop: 6, color: DANGER }]}>
+              {lastError}
+            </Text>
+          )}
+        </View>
 
 
         <View style={styles.card}>
@@ -181,53 +188,53 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   pill: {
-  borderWidth: 1,
-  borderColor: BORDER,
-  paddingHorizontal: 12,
-  paddingVertical: 8,
-  borderRadius: 999,
-  backgroundColor: "transparent",
-},
-pillText: {
-  color: MUTED,
-  fontSize: 13,
-  fontWeight: "800",
-},
-actionBtn: {
-  borderRadius: 14,
-  paddingVertical: 12,
-  paddingHorizontal: 14,
-  alignItems: "center",
-  justifyContent: "center",
-  borderWidth: 1,
-},
-btnPrimary: {
-  borderColor: ACCENT,
-  backgroundColor: "rgba(56,150,255,0.16)",
-},
-btnPrimaryText: {
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: "800",
-},
-btnOutline: {
-  borderColor: BORDER,
-  backgroundColor: "transparent",
-},
-btnOutlineText: {
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: "800",
-},
-btnDanger: {
-  borderColor: DANGER,
-  backgroundColor: "rgba(255,75,92,0.12)",
-},
-btnDangerText: {
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: "900",
-},
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  pillText: {
+    color: MUTED,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  actionBtn: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  btnPrimary: {
+    borderColor: ACCENT,
+    backgroundColor: "rgba(56,150,255,0.16)",
+  },
+  btnPrimaryText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  btnOutline: {
+    borderColor: BORDER,
+    backgroundColor: "transparent",
+  },
+  btnOutlineText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  btnDanger: {
+    borderColor: DANGER,
+    backgroundColor: "rgba(255,75,92,0.12)",
+  },
+  btnDangerText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+  },
 
 
   safeArea: {
