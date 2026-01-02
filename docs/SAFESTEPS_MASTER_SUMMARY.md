@@ -1,288 +1,489 @@
-# SafeSteps – Master Summary
+Below is a **single, updated “source of truth” master spec** for SafeSteps V1 that matches the **latest UI/UX you locked in** (Home + Contacts + Shares + History + Settings), along with **philosophy, tiers, security model, app structure, and build order**.
+
+You can paste this directly into `SAFESTEPS_MASTER_SUMMARY.MD` and then split pieces into supporting docs.
+
+---
+
+# SafeSteps — Master Summary (V1 Scope, UX/UI Locked)
 
 ## 1. Vision
 
-SafeSteps is a **privacy-first personal safety app** that lets people:
+SafeSteps is a **privacy-first, consent-driven safety tool** for location sharing.
 
-- Share their live location **only when they choose**
-- Trigger an **Emergency Mode** that sends clearly labeled emergency pings
-- Optionally share a **live location link** with trusted contacts (even if they don’t install the app)
-- Build **circles of trust** (family/friends) that can see each other on a map when tracking is enabled
+It is **not** a background surveillance tracker.
 
-Core principles:
+Users can:
 
-1. **Privacy-first** – No analytics, no ad tracking, no silent background spying.
-2. **User control** – User explicitly turns tracking on/off and controls who sees what.
-3. **Transparency** – Clear UI showing when location is being used and why.
-4. **Safety over surveillance** – Tool for emergencies and peace of mind, not for controlling people.
+* See their **current location** and signal quality
+* Enable **Active Tracking** (auto pings at a chosen interval)
+* Trigger **Emergency Mode** (high-frequency, clearly-labeled emergency pings)
+* Share a **live location link** with trusted contacts (recipient-specific sessions)
+* Review **Location History** with clear context and navigation actions
 
----
+### Core Principles
 
-## 2. Current Status (Pre-v1)
-
-**Environment**
-
-- Mobile app: Expo + React Native + Expo Router (TypeScript)
-- Backend: Planned Node.js + Express server
-- Data: Supabase (Auth + Postgres + RLS)
-
-**Implemented so far**
-
-- ✅ Project structure with Expo Router
-- ✅ Tab navigation:
-  - `Home`
-  - `Contacts`
-  - `History`
-  - `Settings`
-- ✅ Auth stack:
-  - `(auth)/login`
-  - `(auth)/register`
-- ✅ Supabase Auth:
-  - Email/password sign up & login
-  - Session persistence via SecureStore on native
-  - In-memory session for web
-- ✅ `AuthProvider` + `useAuth` hook:
-  - `user`, `session`
-  - `guestMode` (guest session support)
-  - Derived flags: `isGuest`, `isAuthenticated`, `hasSession`
-  - `signInWithEmail`, `signUpWithEmail`, `signOut`
-  - `isAuthActionLoading`
-- ✅ Route protection (global):
-  - Root `app/_layout.tsx` uses `hasSession` to decide:
-    - No session → `(auth)` group (login/register)
-    - Guest or authenticated session → `(tabs)` group (main app)
-  - Also forces URL:
-    - No session → `/login`
-    - Has session → `/home`
-- ✅ Guest Mode:
-  - “Continue as Guest” on login screen
-  - Guest session uses local-only mode (no backend yet)
-  - Settings shows guest status and “Exit Guest Mode”
-- ✅ Settings screen:
-  - Shows signed-in email **or** guest session label
-  - Logout / Exit Guest Mode uses signOut() + router.replace("/login") to return to the auth flow on all platforms
-
-### 🔜 Next Priority Work
-1) Home screen:
-- Welcome card (email/guest)
-- Active Tracking toggle + frequency
-- Emergency Mode control (override logic)
-
-2) Location capture pipeline:
-- Foreground GPS capture
-- State machine + timer safety
-
-3) Backend + DB:
-- Persist pings
-- Read history
-
-4) Sharing (Option B, v1):
-- Recipient-specific share links
-- Explicit expiration
-- On/off state
-- Share viewer route
-- Token hashing + rate limiting
-
-## 3. Architecture Overview
-
-### 3.1 Frontend (Expo App)
-
-- **Framework**: Expo + React Native + Expo Router
-- **Language**: TypeScript
-- **Navigation**:
-  - Root layout: `app/_layout.tsx`
-    - Wraps app in `AuthProvider`
-    - Uses `hasSession` (from `useAuth`) to route:
-      - No session → `(auth)` with `/login`
-      - Guest or user → `(tabs)` with `/home`
-  - Auth group: `app/(auth)/…`
-    - `login.tsx`
-    - `register.tsx`
-  - Tabs group: `app/(tabs)/…`
-    - `home.tsx`
-    - `contacts.tsx`
-    - `history.tsx`
-    - `settings.tsx`
-- **State / Auth**:
-  - `AuthProvider` wraps the whole app
-  - Uses Supabase client + SecureStore
-  - Tracks:
-    - Supabase `user` and `session`
-    - `guestMode` flag for guest sessions
-    - Derived flags: `isGuest`, `isAuthenticated`, `hasSession`
-  - Exposes auth actions:
-    - `signInWithEmail`
-    - `signUpWithEmail`
-    - `signOut`
-    - `startGuestSession` / `endGuestSession`
-
-### 3.2 Backend (planned)
-
-- **Node.js + Express** server
-- TypeScript
-- Talks to Supabase using:
-  - Service role key (server-only)
-  - Supabase JS client or `pg`
-- Responsibilities:
-  - Verify Supabase JWT in `Authorization: Bearer <token>`
-  - Insert and fetch `location_pings`
-  - Manage `trusted_contacts`
-  - Generate and validate **shareable live location links**
-  - Future: trigger notifications (email/SMS)
-
-### 3.3 Database (Supabase / Postgres)
-
-Planned tables:
-
-- `trusted_contacts`
-- `location_pings`
-- Future: `share_links` (for link-based live location sharing)
-
-RLS enforced:
-
-- Users can only read/write rows where `user_id = auth.uid()`.
+1. **Explicit consent** — Location sharing starts only when the user initiates it.
+2. **No silent tracking** — No hidden background tracking by default.
+3. **Honest state** — Clear UI states (Active, Spotty, Dead signal; Emergency) with no misleading “smoothness.”
+4. **Safety without control** — Designed to reduce uncertainty, not enable surveillance or coercion.
+5. **Minimal data** — Collect only what’s needed; store as little as possible, for as short as possible.
 
 ---
 
-## 4. Core Features (v1 Scope)
+## 2. Product Philosophy (Non-Negotiable)
 
-**v1 MUST-HAVES**
+### “Session-Based Trust”
 
-1. Auth:
-   - Email/password login & register
-   - Logout
-   - **Guest mode**:
-     - Continue as Guest (local-only usage)
-     - Upgrade path to account later
-2. Home:
-   - Centered map with blue dot (user location)
-   - Status: Off / Active Tracking / Emergency Mode
-   - Buttons:
-     - Start/Stop Active Tracking
-     - Activate/Stop Emergency Mode
-     - “Share my live location” (generates link)
-3. Contacts:
-   - Add, list, delete trusted contacts
-   - Flag “receives emergency alerts”
-4. History:
-   - List of pings:
-     - Time
-     - Lat/lng
-     - Type (normal/emergency)
-   - Emergency pings visually highlighted
-5. Settings:
-   - Signed-in email **or** guest session label
-   - Logout / Exit Guest Mode
-   - Data & Safety text
+All location sharing is **session-based**:
 
-## Session Modes & Sharing Truths (Authoritative)
+* Explicit start
+* Explicit stop
+* Explicit expiration
+* Explicit recipients (tier-dependent)
+* Tokens are **per-recipient** and **revocable**
 
-SafeSteps supports two session types:
+No silent extensions. No “always-on live” illusion.
 
-- **Authenticated (Supabase)**: user has a real account + JWT. Data can be stored and fetched from the backend.
-- **Guest (local-only)**: user has no Supabase identity. Tracking/history stay on device by default.
+### “State is Derived, Not Claimed”
 
-### The Golden Rule
-**Guest data stays local unless the user explicitly enables sharing.**
+The UI shows truth derived from signals:
 
-### Share Links (v1 Signature Feature)
-SafeSteps supports secure live-location sharing with:
-
-- Explicit expiration
-- Explicit recipients (recipient-specific links)
-- Clear on/off state (pause or revoke instantly)
-
-#### Guest Sharing (Ephemeral Relay Model)
-Guest users can still share, but sharing requires a server relay:
-
-- The trusted contact **cannot** read data directly from the guest’s phone.
-- When a guest starts sharing, SafeSteps temporarily sends **only the minimum live location snapshot** to the server for the duration of the share session.
-- The server enforces:
-  - expiration
-  - active/paused state
-  - per-recipient revocation
-- When sharing ends (expired or turned off), server-side share data is deleted and links become invalid.
-
-#### Authenticated Sharing
-Authenticated users can share through the same share session system, but are eligible for richer server-backed features later (history windows, multi-device sync, etc.) while still honoring explicit consent and revocation.
-
-
-**Non-goals for v1**
-
-- Full-blown background tracking (optional/experimental only)
-- Push notifications
-- Family map with multiple users in real-time (v2+)
-- Advanced analytics, admin dashboards, etc.
+* **Signal Accuracy: Active** → GPS + network healthy, last ping successfully sent recently
+* **Spotty** → degraded GPS or degraded network (pings may be delayed)
+* **Dead** → no reliable GPS/network; cannot confirm delivery
 
 ---
 
-## 5. Privacy & Security Model
+## 3. User Tiers (Locked)
 
-- No third-party analytics SDKs.
-- No ad networks.
-- Location only used when:
-  - Active Tracking or Emergency Mode is ON, or
-  - User explicitly triggers a one-time action (e.g., share link).
-- Location data stored:
-  - In `location_pings` table scoped to `user_id`.
-- Users explicitly control:
-  - When tracking is ON vs OFF.
-  - Who is a trusted contact.
-  - Whether they share a link.
+SafeSteps has three tiers. The key idea: **Guests can try the product meaningfully**, accounts provide **durability and control**, paid provides **scale**.
+
+### 3.1 Guest
+
+Guest is **local-only** and limited for safety/abuse reasons.
+
+Guest can:
+
+* Use app immediately
+* See map + lat/lng + accuracy
+* Manual pings (local history)
+* Limited auto tracking options (bounded)
+* Add **1 trusted contact**
+* Run **1 active share session** (ephemeral, limited duration)
+* View honest states (Active/Spotty/Dead)
+
+Guest cannot:
+
+* Emergency mode
+* Multiple contacts or multiple active shares
+* Long-duration links
+* Cloud history restore after reinstall
+* Advanced rate/frequency customization
+
+### 3.2 Free Account
+
+Free account enables **identity-backed trust**:
+
+* Multiple trusted contacts (e.g., up to 3)
+* Cloud-backed short history window (e.g., 24 hours)
+* More sharing durability and controls
+* Lower frequency presets than guest
+
+### 3.3 Paid Account
+
+Paid unlocks **scale and flexibility**, not truth:
+
+* More trusted contacts (10+)
+* Multiple active shares
+* Longer share durations (24h+)
+* Extended history (7–30 days)
+* Lower minimum interval (e.g., 15s)
+* (Optional) custom interval input clamped safely
 
 ---
 
-## 6. Design Language
+## 4. UI/UX — Final Navigation & Screen Responsibilities
+
+### Bottom Navigation (Locked)
+
+Tabs:
+
+* **Home**
+* **Contacts**
+* **Shares**
+* **History**
+* **Settings**
+
+No history or active-share management on Home.
+
+---
+
+## 5. Screen UX Contracts (What Each Screen Does)
+
+## 5.1 Home (Real-time “Now”)
+
+**Home = tracking + map only.**
+This screen answers: **“Where am I right now, and is the app working?”**
+
+### Home Contains
+
+* **Tracking Card**
+
+  * Status: OFF / ACTIVE / EMERGENCY
+  * Frequency selector (tier-based options)
+  * Primary actions:
+
+    * Start/Stop Active Tracking
+    * Emergency (account-only; prominent red)
+    * **Share Live Location** (renamed from “Ping Now”)
+* **Signal Accuracy indicator**
+
+  * Active / Spotty / Dead
+  * Must reflect actual ability to send pings
+* **Coordinates + accuracy**
+
+  * Lat/Lng
+  * Accuracy meters (e.g., 5m)
+  * “Last updated X sec ago”
+* **Map**
+
+  * Blue location dot + accuracy circle
+  * No historical pins on Home (Home is present tense)
+
+### Share Live Location (Home)
+
+Tapping **Share Live Location** does **not** immediately share.
+It navigates to **Contacts** to pick a recipient and start a session.
+
+---
+
+## 5.2 Contacts (Recipient Selection + Manage Trusted Contacts)
+
+**Contacts = trusted people list + start a share per contact.**
+This screen answers: **“Who can I share with?”**
+
+### Contacts Contains
+
+* Search input
+* Trusted contact list rows:
+
+  * Name
+  * Phone
+  * Optional email
+  * Action button:
+
+    * **Share Location Link**
+* Row state if already shared:
+
+  * “SHARING” indicator (green dot/pill)
+  * Button changes state (disabled or becomes “Manage/Revoke”)
+
+### Contact Selection Share Flow
+
+1. User taps **Share Location Link** on a contact row
+2. App creates/activates a **recipient-specific share session**
+3. UI updates contact row to show **SHARING**
+4. Link is available in Shares screen (manage/copy/revoke)
+
+---
+
+## 5.3 Shares (Active Share Sessions Management)
+
+**Shares = active sessions + control.**
+This screen answers: **“Who is seeing me right now?”**
+
+### Shares Contains
+
+* Search input
+* Active Shares list:
+
+  * Contact name + phone/email
+  * Status pill: LIVE / STALE (derived)
+  * Time remaining (expiration countdown)
+  * “Manage” action
+* **+ New Share** button (valid entry point)
+
+### Allowed Entry Points
+
+Creating a share is allowed from:
+
+* Home (via “Share Live Location” → Contacts)
+* Shares (via “+ New Share” → Contacts)
+
+Both must funnel into **the same share creation flow**.
+
+---
+
+## 5.4 History (Location History + Action Buttons)
+
+**History = logs + inspect + directions.**
+This screen answers: **“What happened before, and where was it?”**
+
+Each history entry includes:
+
+* **Time**
+* **Place name** (reverse geocode)
+* Address (if available)
+* Ping type:
+
+  * **User Ping** (self)
+  * **Trusted Contact Ping** (includes contact name)
+  * Emergency pings clearly labeled and styled red
+* Per-entry actions:
+
+  * **Location Ping** → focuses map UI on that ping location, shows marker & accuracy
+  * **Directions** → opens system share sheet / app chooser for navigation apps (Google Maps, Apple Maps, Waze, etc.)
+
+History view includes:
+
+* List + small embedded map preview area
+* Filter/search
+* “Recent / All History” tabs (optional)
+
+---
+
+## 5.5 Settings (Account, Preferences, Trust)
+
+**Settings = account & privacy clarity.**
+This screen answers: **“What is SafeSteps doing and what is my account state?”**
+
+### Settings Contains
+
+* Account section
+* Location Settings (preferences only, no ping actions)
+* Notifications (future-ready; may be minimal in V1)
+* Subscription (paid plan management)
+* Help & Support
+* Log Out button
+* Privacy Policy + Terms + app version
+
+Guest mode variant:
+
+* Shows “Guest session (local only)”
+* “Exit Guest Mode” instead of Log Out
+
+---
+
+## 6. Core Features (V1)
+
+### 6.1 Tracking Modes (One timer at a time)
+
+Modes:
+
+* Idle (OFF)
+* Active Tracking (preset interval)
+* Emergency Mode (override + red labeling)
+
+Rules:
+
+* **No duplicate timers**
+* Emergency overrides Active Tracking if active
+* Pings occur only when:
+
+  * user taps actions OR
+  * Active Tracking is ON OR
+  * Emergency is ON
+
+### 6.2 Emergency Mode (V1 Definition)
+
+Emergency is basically “live share to everyone,” but implemented as its own mode/session:
+
+* Sends pings labeled **EMERGENCY**
+* Visually red in UI
+* Recipients = **all trusted contacts** (account-only)
+* Frequency fixed per tier (e.g., Free: 30s, Paid: 15s)
+* Stop is deliberate (confirm or press-and-hold) to prevent accidental shutdown
+
+---
+
+## 7. Sharing Model (V1 Signature)
+
+### Share Sessions (unit of trust)
+
+A share session has:
+
+* start time
+* expiration time
+* state: active/paused/revoked/expired
+* recipient relationship
+* token (per recipient)
+* ability to revoke instantly
+
+### Share Links (Recipient-specific)
+
+* Each trusted contact receives a link
+* Link opens a web viewer (no app install required)
+* Viewer sees:
+
+  * Map dot + accuracy circle
+  * LIVE/STALE/OFFLINE state
+  * “Last updated X ago”
+  * Expiration timer
+  * “Open in Maps” action
+  * Recipient controls: stop receiving / block sender (future if implemented)
+
+---
+
+## 8. Security & Privacy Model (Zero-Trust)
+
+### 8.1 Data Minimization
+
+* No third-party analytics SDKs
+* No ad networks
+* No selling location data
+* Collect only:
+
+  * location pings required for the feature
+  * recipient-specific session metadata
+
+### 8.2 Authentication & Authorization
+
+* Supabase Auth (email/password)
+* RLS everywhere:
+
+  * users can only read/write rows where `user_id = auth.uid()`
+* JWT required for authenticated API calls
+
+### 8.3 Share Link Security
+
+* Tokens are random, high-entropy
+* Store token hashes in DB (not raw tokens)
+* Revoke = immediate invalidation
+* Expired sessions cannot be resumed silently
+
+### 8.4 Abuse Prevention (V1-ready, can be expanded)
+
+* Rate-limit share creation per user/device
+* Clamp ping intervals by tier
+* Guest limits enforced server-side when guest sharing exists
+* (Optional later) recipient block list keyed to hashed recipient identifier
+
+---
+
+## 9. Architecture (V1 Implementation Path)
+
+### Recommended V1 Approach
+
+**Supabase-first**:
+
+* Supabase Auth
+* Postgres tables + RLS
+* Minimal server (optional)
+* Add Edge Functions / Express only when needed for:
+
+  * rate limiting / abuse heuristics
+  * secure token issuance
+  * web viewer aggregation
+  * notifications later
+
+### Frontend
+
+* Expo + React Native + Expo Router
+* TypeScript
+* `AuthProvider` manages:
+
+  * session
+  * guest mode
+  * derived flags
+* Tab group includes:
+
+  * Home / Contacts / Shares / History / Settings
+
+### Backend (Optional in V1)
+
+If used:
+
+* Validates Supabase JWT
+* Issues share sessions/tokens
+* Serves history pages for viewer
+
+---
+
+## 10. Database (Supabase / Postgres, V1 Tables)
+
+Planned core tables:
+
+* `trusted_contacts`
+* `location_pings`
+* `share_sessions`
+* `share_recipients` (or `share_tokens`)
+
+Key column concepts:
+
+* `location_pings.mode` = `normal | emergency`
+* `location_pings.source` = `user | share`
+* `location_pings.shared_to_contact_id` (nullable)
+* `share_sessions.status` = `active | paused | revoked | expired`
+* `share_sessions.expires_at`
+
+All user-owned rows scoped by `user_id` with RLS.
+
+---
+
+## 11. Design Language (Locked)
 
 Colors:
 
-- Background: `#050814`
-- Card background: `#0c1020`
-- Border: `#1a2035`
-- Accent (primary): `#3896ff`
-- Muted text: `#a6b1cc`
-- Danger: `#ff4b5c`
+* Background: `#050814`
+* Card: `#0c1020`
+* Border: `#1a2035`
+* Accent: `#3896ff`
+* Muted text: `#a6b1cc`
+* Danger: `#ff4b5c`
 
 Aesthetic:
 
-- Dark, minimal, safety-tech
-- Rounded cards (14–18px radius)
-- Clean typography, high contrast
-- Clear, bold emergency elements (red and prominent)
-
-See `docs/DESIGN_GUIDE.md` for full design spec.
+* Dark, minimal, safety-tech
+* Rounded cards
+* Low-noise typography
+* Emergency is always visually distinct (red)
 
 ---
 
-## 7. Current Step & Next Milestones
+## 12. V1 Definition of Done
 
-**Current step:**
+V1 is complete when:
 
-- Guest mode + route protection implemented.
-- Working login/register + logout/exit guest in Settings.
-- Next focus: **Home screen UX** for solo user and guest vs signed-in states.
+* Home shows map + tracking + signal truth
+* Active Tracking works reliably (single timer)
+* Emergency Mode works reliably (clearly labeled, sent to all contacts)
+* Contacts supports adding/managing contacts and starting share links
+* Shares supports managing active share sessions
+* History shows pings with:
 
-**Next milestones:**
-
-1. Build Home screen:
-   - “Welcome, {email}” (or “Welcome, Guest”)
-   - Tracking mode status card (stub)
-   - Buttons to navigate toward future tracking/emergency flows
-2. Design DB schema in Supabase for `trusted_contacts` and `location_pings`.
-3. Build Express backend and wire first API endpoints.
-4. Decide local-only vs cloud-backed behavior differences for guest vs authenticated users.
+  * time, place, type, contact (if shared)
+  * “Location Ping” + “Directions” actions
+* Settings correctly represents account/guest state and logout behavior
+* RLS and token security are enforced
+* Failure states are honest and visible (no silent success)
 
 ---
 
-## 8. How to Use This Document
+## 13. Build Order (Fastest Path to Ship V1)
 
-- This file is the **single source of truth** about:
-  - What SafeSteps is
-  - What exists today
-  - What’s coming next
-- Update this whenever:
-  - Architecture changes
-  - Major features land
-  - Versions (v1, v2, etc.) shift
+1. **Finalize DB schema + RLS** (contacts, pings, share sessions/tokens)
+2. Implement **tracking provider** (single timer, mode overrides)
+3. Implement **Home** wiring (signal state + location + actions)
+4. Implement **Contacts → Share Location Link flow**
+5. Implement **Shares management** (list/revoke/expiration)
+6. Implement **History** with “Location Ping” + “Directions”
+7. Hardening:
 
-This doc is your **project brain** that any AI (or human dev) can load to understand SafeSteps quickly.
+   * rate limits
+   * interval clamps
+   * error handling & UI honesty polish
+
+---
+
+## 14. What SafeSteps Is Not (V1 Non-Goals)
+
+* No always-on background tracking
+* No danger detection / kidnapping detection
+* No push notifications required for V1
+* No full family “always visible” map (v2+)
+* No analytics/telemetry
+* No dark-pattern upsells
+
+---
+
+If you want, I can also generate a **diff-style “What changed vs your current master summary”** so you can update the other docs faster (DESIGN_GUIDE, SECURITY_MODEL, DB_SCHEMA, etc.) without missing anything.

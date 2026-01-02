@@ -1,228 +1,119 @@
-# SafeSteps — API Specification
+### `docs/api/API_SPEC.md`
+```md
+# SafeSteps — API Specification (V1)
 
-Base URL (development):  
-`http://localhost:4000`
-
-Authentication:
-All protected endpoints require the header:
-
-```
-
-Authorization: Bearer <supabase_access_token>
-
-````
+_V1 is Supabase-first._  
+Most authenticated operations are done directly via Supabase (RLS enforced).  
+Public share viewing requires a server-side surface (Edge Function or backend) so raw tokens are never queried client-side.
 
 ---
 
-# 1. Health Check
+## 1) Authenticated App Data (Supabase)
 
-### GET `/health`
+### 1.1 Contacts
+- Table: `trusted_contacts`
+- Operations:
+  - list contacts for current user
+  - insert/update/delete contact
+- Security: RLS by `user_id = auth.uid()`
 
-**Description:**  
-Simple operational check.
+### 1.2 Location Pings
+- Table: `location_pings`
+- Operations:
+  - insert ping (ACTIVE / EMERGENCY)
+  - list pings (History)
+- Security: RLS by `user_id = auth.uid()`
 
-**Auth:** None
-
-**Response:**
-```json
-{ "status": "ok" }
-````
+### 1.3 Share Sessions
+- Tables:
+  - `share_sessions`
+  - `share_recipients` (token hashes)
+- Operations:
+  - create session (with expiration)
+  - create per-recipient token hash rows
+  - revoke/end session
+  - list active sessions (Shares tab)
+- Security: RLS by `user_id = auth.uid()`
 
 ---
 
-# 2. Location Pings
+## 2) Public Share Viewer (Recommended Edge Function)
 
-## POST `/api/locations`
+Because viewers do not authenticate, token validation must happen server-side.
 
-**Description:**
-Creates a new location ping for the authenticated user.
+### 2.1 GET latest location for a share token
 
-**Headers:**
+**Endpoint (Edge Function or backend):**
+- `GET /share/latest?token=<raw_token>`
 
-```
-Authorization: Bearer <token>
-Content-Type: application/json
-```
+**Behavior:**
+- hash `token` server-side (SHA-256)
+- lookup `share_recipients.token_hash`
+- ensure recipient + session are `active` and not expired
+- fetch latest ping for the owner/session
+- return minimal payload
 
-**Body:**
-
-```json
-{
-  "lat": 32.123456,
-  "lng": -110.123456,
-  "accuracy": 8.5,
-  "type": "normal",
-  "source": "active_tracking"
-}
-```
-
-Valid values:
-
-* `type`: `"normal"` | `"emergency"`
-* `source`: `"active_tracking"` | `"emergency_mode"` | `"manual"`
-
-**Response (201 Created):**
-
+**Response (example):**
 ```json
 {
-  "id": "uuid",
-  "user_id": "uuid",
-  "lat": 32.123456,
-  "lng": -110.123456,
-  "accuracy": 8.5,
-  "type": "normal",
-  "source": "active_tracking",
-  "created_at": "2025-01-01T00:00:00Z"
+  "status": "LIVE",
+  "expiresAt": "2026-01-01T20:10:00.000Z",
+  "lastUpdatedAt": "2026-01-01T19:58:10.000Z",
+  "lat": 40.72936,
+  "lng": -73.99363,
+  "accuracyM": 5.0,
+  "mode": "normal"
 }
-```
+Status derivation for viewer:
 
----
+LIVE / STALE / OFFLINE (revoked/expired)
 
-## GET `/api/history`
+SERVICE_DOWN when function not reachable
 
-**Description:**
-Returns paginated location history for the authenticated user.
+2.2 POST revoke token (viewer “stop receiving”) (optional V1+)
+POST /share/revoke
 
-**Headers:**
+json
+Copy code
+{ "token": "<raw_token>" }
+Server:
 
-```
-Authorization: Bearer <token>
-```
+hash token
 
-**Query Params:**
+set share_recipients.status = 'revoked'
 
-* `limit` (default: 50)
-* `offset` (default: 0)
+3) Guest Sharing (Optional; if enabled)
+Guest mode is local-only by default.
+If guest share links are allowed in V1, they require a relay surface (Edge Function/back-end) because guests have no auth.uid().
 
-**Response Example:**
+Suggested endpoints:
 
-```json
-{
-  "items": [
-    {
-      "id": "uuid",
-      "lat": 32.123456,
-      "lng": -110.123456,
-      "accuracy": 10.0,
-      "type": "normal",
-      "source": "active_tracking",
-      "created_at": "2025-01-01T00:00:00Z"
-    }
-  ],
-  "total": 42
-}
-```
+POST /guest/share/start
 
----
+POST /guest/share/ping
 
-# 3. Trusted Contacts
+POST /guest/share/stop
 
-## GET `/api/contacts`
+These must be rate-limited and expiration-enforced.
 
-**Description:**
-Lists all trusted contacts for the authenticated user.
+4) Auth for Server Surfaces
+If using a backend/edge function for authenticated operations:
 
-**Headers:**
+require Authorization: Bearer <supabase_access_token>
 
-```
-Authorization: Bearer <token>
-```
+verify JWT using Supabase
 
-**Response Example:**
+If using only Supabase tables:
 
-```json
-[
-  {
-    "id": "uuid",
-    "user_id": "uuid",
-    "name": "Mom",
-    "contact_email": "mom@example.com",
-    "contact_phone": null,
-    "receive_emergency_alerts": true,
-    "created_at": "2025-01-01T00:00:00Z"
-  }
-]
-```
+client uses Supabase session directly (RLS enforced)
 
----
+5) Security Requirements (Non-negotiable)
+Share tokens are high entropy
 
-## POST `/api/contacts`
+Store only token hashes in DB
 
-**Description:**
-Create a new trusted contact.
+Never allow anonymous reads on user tables
 
-**Headers:**
+Public viewer access must be mediated by server code (Edge Function/back-end)
 
-```
-Authorization: Bearer <token>
-Content-Type: application/json
-```
-
-**Body Example:**
-
-```json
-{
-  "name": "Mom",
-  "contact_email": "mom@example.com",
-  "contact_phone": null,
-  "receive_emergency_alerts": true
-}
-```
-
-**Response (201 Created):**
-
-```json
-{
-  "id": "uuid",
-  "user_id": "uuid",
-  "name": "Mom",
-  "contact_email": "mom@example.com",
-  "contact_phone": null,
-  "receive_emergency_alerts": true,
-  "created_at": "2025-01-01T00:00:00Z"
-}
-```
-
----
-
-## DELETE `/api/contacts/:id`
-
-**Description:**
-Delete a trusted contact belonging to the authenticated user.
-
-**Headers:**
-
-```
-Authorization: Bearer <token>
-```
-
-**Response (204 No Content):**
-
-```
-(no body)
-```
-
----
-
-# 4. Shareable Live Location Links (Future)
-
-## POST `/api/share-links`
-
-**Description:**
-Generate a token-based URL for sharing user’s live location with anyone (no login required).
-
-Status: *Future feature.*
-
----
-
-## GET `/api/share-links/:token`
-
-**Description:**
-Returns the latest known location for the user who created the share token.
-
-Status: *Not yet implemented.*
-
-```
-
----
-
+Add rate limiting on token endpoints

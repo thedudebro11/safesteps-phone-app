@@ -1,137 +1,205 @@
 # SafeSteps — Authentication & Guest Flow
 
-_Last updated: 2025-12-11_
+_Last updated: 2026-01-02_
 
-This document describes the complete authentication, guest access, and navigation behavior of the SafeSteps mobile application.
+This document defines the **authoritative authentication, guest mode, and routing behavior** for the SafeSteps application.
 
-It is an authoritative reference for:
-- How auth state is represented
-- How guest mode works
-- How routing decisions are made
-- How logout / exit guest is handled safely on all platforms
+It describes:
+- Auth state representation
+- Guest session behavior
+- Route protection and navigation rules
+- Logout / exit guest handling
+- How auth state gates features (not navigation)
 
----
-
-## 1. Goals
-
-- Allow users to use SafeSteps **immediately** without account creation.
-- Support a clean upgrade path from guest → authenticated user.
-- Maintain a simple, auditable auth model:
-  - One source of truth for auth + guest state
-  - Centralized routing logic
-- Ensure deterministic behavior on **native and web**.
+This file is intentionally focused on **state and flow**, not security primitives
+(see `SECURITY_NOTES.md` for security guarantees).
 
 ---
 
-## 2. Core Auth Concepts
+## 1) Goals
 
-### 2.1 Authenticated User (Supabase Session)
+- Allow users to use SafeSteps **immediately** without account creation
+- Support a clean, explicit upgrade path from guest → authenticated user
+- Maintain a **single source of truth** for auth + guest state
+- Ensure deterministic behavior across **iOS, Android, and Web**
+- Keep navigation stable even when features are gated
 
-An authenticated user is backed by Supabase Auth.
+---
+
+## 2) Runtime Auth States (Locked)
+
+SafeSteps supports **exactly three** runtime states:
+
+### 2.1 No Session
+- No Supabase session
+- `guestMode = false`
+- User must remain in auth flow
+
+### 2.2 Guest Session
+- No Supabase user
+- `guestMode = true`
+- Local-only usage
+- Limited feature set
+
+### 2.3 Authenticated Session
+- Supabase `user` and `session` present
+- Cloud-backed features allowed
+- Row Level Security enforced
+
+Only **one state** may be active at a time.
+
+---
+
+## 3) Core Concepts
+
+### 3.1 Authenticated User (Supabase)
+
+Authenticated users are backed by Supabase Auth.
 
 Provides:
 - `user.id` (UUID)
 - `user.email`
-- Access token (JWT) for backend API calls
-
-Server-side source of truth for:
-- `location_pings`
-- `trusted_contacts`
-- Future: family groups, share links, subscriptions
+- JWT for authenticated requests
+- Access to cloud-backed features:
+  - trusted contacts
+  - share sessions
+  - location history (tier-dependent)
+  - emergency mode
 
 ---
 
-### 2.2 Guest Session (Local-Only)
+### 3.2 Guest Session (Local-Only by Default)
 
-A guest session allows immediate use without an account.
+Guest mode enables immediate use without an account.
 
 Characteristics:
-- Represented by a local-only flag in `AuthProvider`
+- Represented by a local-only `guestMode` flag
 - No Supabase user
 - No JWT
-- No backend access
+- No direct database access
 
-Intended for:
-- Trying the app before signing up
-- Local-only tracking and history
-- Zero server persistence
+Guest data:
+- Stored locally on device
+- Not synced to Supabase
+- Lost if app data is cleared or guest mode is exited
 
-Guest data is **not synced** and is lost when the guest session ends.
+Guest mode exists to:
+- Try the app safely
+- Understand UX and trust model
+- Avoid forced signup
 
 ---
-## Guest Sharing Behavior (v1)
 
-Guest mode is local-only **by default**.
+## 4) Guest Sharing Behavior (V1)
 
-However, share links require a server to be usable and enforceable. Therefore:
+Guest mode is **local-only by default**.
 
-- Guest tracking/history remains on device.
-- If the user explicitly enables sharing, the app temporarily relays the **minimum required live location snapshot** to the server until:
-  - the share expires, or
-  - the user turns sharing off, or
-  - a recipient link is revoked.
-- After the share ends, links are invalid and share data is deleted.
+However, **live location sharing** requires server mediation to be enforceable.
 
+Therefore, when a guest explicitly initiates a share:
 
+- Only the **minimum live location snapshot** is relayed
+- Relay lasts **only for the active share session**
+- The server enforces:
+  - expiration
+  - token validity
+  - revocation
+- When sharing ends:
+  - server-side share data is deleted
+  - links become invalid
 
-## 3. AuthProvider API
+Guest sharing is:
+- explicit
+- time-bounded
+- recipient-specific
+- limited to one active share (V1)
 
-`src/features/auth/AuthProvider.tsx` exposes the following state and actions:
+---
 
-### 3.1 State
+## 5) AuthProvider API (Source of Truth)
+
+`src/features/auth/AuthProvider.tsx` exposes the **only authoritative auth state**.
+
+### 5.1 State
 
 - `user: User | null`
 - `session: Session | null`
 - `guestMode: boolean`
 - `isAuthLoaded: boolean`
-  - `true` once initial Supabase session check completes
+  - `true` once Supabase session resolution completes
 - `isAuthActionLoading: boolean`
   - `true` while sign-in / sign-up / sign-out is in progress
 
-### 3.2 Derived Flags
+---
 
-- `isAuthenticated = !!user`
-- `isGuest = guestMode && !user`
-- `hasSession = isAuthenticated || isGuest`
+### 5.2 Derived Flags (Locked)
 
-`hasSession` is the **single source of truth** for route access.
+```ts
+isAuthenticated = !!user
+isGuest = guestMode && !user
+hasSession = isAuthenticated || isGuest
+````
+
+* `hasSession` is the **single routing gate**
+* Feature access is controlled separately (by tier + mode)
 
 ---
 
-### 3.3 Actions
+### 5.3 Actions
 
-- `signInWithEmail(email, password)`
-- `signUpWithEmail(email, password)`
-- `startGuestSession()`
-  - Clears any Supabase state
-  - Sets `guestMode = true`
-- `signOut()`
-  - If authenticated:
-    - Calls `supabase.auth.signOut()`
-  - Clears:
-    - `user`
-    - `session`
-    - `guestMode`
+* `signInWithEmail(email, password)`
+* `signUpWithEmail(email, password)`
+* `startGuestSession()`
+
+  * Clears Supabase state
+  * Sets `guestMode = true`
+* `signOut()`
+
+  * If authenticated:
+
+    * calls `supabase.auth.signOut()`
+  * Clears:
+
+    * `user`
+    * `session`
+    * `guestMode`
+    * tracking timers
+    * in-memory state
 
 ---
 
-## 4. Navigation & Route Protection
+## 6) Navigation & Route Protection (Expo Router)
 
-### 4.1 Root Layout (`app/_layout.tsx`)
+### 6.1 Route Groups
 
-The root layout is responsible for **all routing decisions**.
+* `(auth)`
 
-Behavior:
-- Wraps the app in `<AuthProvider>`
-- Waits for `isAuthLoaded`
-- Forces navigation based on `hasSession`
+  * `/login`
+  * `/register`
+* `(tabs)`
 
-Routing rules:
+  * `/home`
+  * `/contacts`
+  * `/shares`
+  * `/history`
+  * `/settings`
 
-- `hasSession === false` → `/login`
-- `hasSession === true` → `/home`
+---
 
-Implementation pattern:
+### 6.2 Root Layout Rules (`app/_layout.tsx`)
+
+The root layout owns **all navigation enforcement**.
+
+Rules:
+
+* If `hasSession === false`
+
+  * force route to `/login`
+* If `hasSession === true`
+
+  * force route to `/home`
+
+Pseudocode:
 
 ```ts
 if (!hasSession) {
@@ -139,3 +207,94 @@ if (!hasSession) {
 } else {
   router.replace("/home");
 }
+```
+
+This ensures:
+
+* No screen is accessible without an explicit session
+* Guest and authenticated users share the same navigation shell
+* The tab structure never changes (only feature availability does)
+
+---
+
+## 7) Tabs & Feature Gating (Important Distinction)
+
+Navigation is **not** gated by auth tier.
+
+Feature access **is**.
+
+### Tabs (Always Visible)
+
+* Home
+* Contacts
+* Shares
+* History
+* Settings
+
+### Feature Gating Examples
+
+* Guest:
+
+  * cannot enable Emergency Mode
+  * limited contacts
+  * limited share sessions
+  * local-only history
+* Authenticated:
+
+  * emergency enabled
+  * cloud-backed history
+  * multiple share sessions (tier-dependent)
+
+This avoids UI churn and keeps mental models stable.
+
+---
+
+## 8) Logout & Exit Guest Mode (Safety Rules)
+
+### 8.1 Authenticated Logout
+
+On logout:
+
+1. Call `supabase.auth.signOut()`
+2. Clear persisted session storage
+3. Stop all tracking timers
+4. Clear in-memory state
+5. `router.replace("/login")`
+
+---
+
+### 8.2 Exit Guest Mode
+
+On exit guest:
+
+1. Clear `guestMode`
+2. Clear local-only tracking/history
+3. Stop all timers
+4. `router.replace("/login")`
+
+**Critical rule:**
+Timers and tracking must never survive logout or guest exit.
+
+---
+
+## 9) Invariants (Must Always Hold)
+
+* There is exactly one active session state
+* Tracking cannot run without a visible session
+* Guest mode never silently escalates privileges
+* Auth state changes always reset tracking state
+* Routing depends only on `hasSession`, not tier
+
+---
+
+## 10) Update Policy
+
+Update this file when:
+
+* AuthProvider API changes
+* Route structure changes
+* Guest or authenticated capabilities change
+* New session types are introduced
+
+This file is the **authoritative auth & navigation reference** for SafeSteps.
+

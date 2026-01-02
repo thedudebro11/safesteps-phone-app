@@ -33,3 +33,46 @@ Format: Keep a running **[Unreleased]** section, and cut releases when versions 
 > Placeholder for first internal milestone.
 - Project initialized
 
+# SafeSteps — Changelog
+
+All notable changes to this project will be documented in this file.
+
+Format: Maintain **[Unreleased]**, cut releases when versions are tagged.
+
+---
+
+## [Unreleased]
+
+### Added
+- Locked V1 UI/UX structure and screen responsibilities:
+  - Home (tracking + map only)
+  - Contacts (trusted contacts + start share per contact)
+  - Shares (active share session management)
+  - History (logs + map focus + directions)
+  - Settings (account + privacy)
+- New tab: **Shares**
+- Home primary action renamed: **“Ping Now” → “Share Live Location”** (funnels to Contacts)
+- History per-entry actions:
+  - `Location Ping` (focus map to ping)
+  - `Directions` (open external maps app chooser)
+- Share entry points:
+  - Home → Contacts
+  - Shares → Contacts
+
+### Changed
+- V1 philosophy tightened: **session-based, consent-driven**; no silent tracking
+- Emergency mode defined as:
+  - distinct state (`EMERGENCY`)
+  - red labeling
+  - account-only
+  - sends to all trusted contacts
+  - overrides active tracking
+- Documentation updated to reflect tier rules, signal state semantics, and share session model.
+
+### Fixed
+- (No new fixes logged)
+
+---
+
+## [0.1.0] — pre-v1 internal
+- Project initialized

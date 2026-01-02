@@ -1,144 +1,134 @@
-# SafeSteps – Design Guide
+# SafeSteps — Design Guide (V1)
 
-## 1. Visual Identity
+## 1) Visual Identity
 
-**Theme:** Dark, calm, safety-focused.  
-The app should feel like a **protective tool**, not a spy camera.
+**Theme:** dark, calm, safety-tech.  
+SafeSteps should feel like a **protective instrument panel**, not a social app and not surveillance software.
 
-### Colors
+Design priorities:
+- Clear state, low noise
+- High contrast
+- Strong separation between **normal** actions (blue) and **emergency** actions (red)
+
+---
+
+## 2) Color System (Locked)
 
 - Background: `#050814`
-- Card background: `#0c1020`
+- Card: `#0c1020`
 - Border: `#1a2035`
-- Accent (primary): `#3896ff`
+- Primary/Accent: `#3896ff`
 - Muted text: `#a6b1cc`
 - Danger: `#ff4b5c`
-- White text: `#ffffff`
 
-Use accent sparingly for:
-
-- Primary actions (e.g., “Start Tracking”)
-- Links / important CTAs
-- Active tab indicators
-
-Use danger color for:
-
-- Emergency Mode button
-- Error text
-- Destructive actions (delete contact)
+Semantic use:
+- **Blue** = normal, safe, controllable
+- **Red** = emergency, high consequence
+- **Green pills/dots** = LIVE/ACTIVE (status only; not a primary brand color)
+- **Muted gray** = informational
 
 ---
 
-## 2. Typography
+## 3) Layout Rules
 
-Use a clean sans-serif (system default is fine for now).
-
-Basic scale:
-
-- Title (screen headline): 24–28 px, bold
-- Section titles: 16–18 px, semi-bold
-- Body text: 13–15 px, regular
-- Labels: 12–13 px, medium
-
----
-
-## 3. Components
-
-### Cards
-
-- Background: `#0c1020`
-- Border: `#1a2035`, 1 px
-- Radius: 16–18
-- Padding: 16
-- Spacing between elements: 6–10
-
-Used for:
-
-- Account info
-- Status info (tracking state)
-- Data & Safety explanations
-- History items (optional)
-
-### Buttons
-
-Primary action (blue):
-
-- Background: `#3896ff`
-- Text: white
-- Radius: 999 (pill) or 14
-- Height: ~48
-- Full-width on mobile where appropriate
-
-Danger action (red, especially Emergency):
-
-- Background: transparent or `#ff4b5c` (depending on emphasis)
-- Border: `#ff4b5c`
-- Text: `#ff4b5c` or white (for very prominent emergency)
-
-Disabled:
-
-- `opacity: 0.6`
-- No change in layout
+- Layout style: **stacked cards** over a dark background
+- Cards:
+  - Rounded corners (14–18px)
+  - Subtle border + soft shadow/glow
+- Typography:
+  - Large, bold screen titles
+  - Subtitles use muted text
+  - Avoid playful type ramps
 
 ---
 
-## 4. Layout Patterns
+## 4) Navigation (Locked)
 
-### Screen Layout
+Bottom tabs (always visible, never cropped in mocks):
+- Home
+- Contacts
+- Shares
+- History
+- Settings
 
-- `SafeAreaView` with background `#050814`
-- Horizontal padding: 20
-- Vertical spacing: 12–16
-- Scrollable content when needed
-
-### Home Screen
-
-- Top:
-  - Greeting: “Welcome, {email}”
-- Middle:
-  - Map component occupying ~50–60% of vertical space
-- Bottom:
-  - Tracking status card
-  - “Start/Stop Tracking” button
-  - “Emergency Mode” button
-  - “Share my live location” button (possibly below or inside card)
+Icons: simple line icons, muted when inactive, accent when active.
 
 ---
 
-## 5. Accessibility
+## 5) Home Screen (Paid User) — “Now”
 
-- Maintain high contrast:
-  - White text on dark backgrounds
-  - Avoid low-contrast muted text for critical info
-- Hit targets:
-  - Buttons at least 44x44 points
-- Clear labels on:
+Home only contains:
+- Tracking control card
+- Signal state (Active / Spotty / Dead)
+- Lat/Lng + accuracy + last update time
+- Map with accuracy circle
 
-  - Buttons
-  - Toggles
-  - Emergency actions
+Primary actions on Home:
+- Start/Stop Active Tracking (blue)
+- Emergency (red)
+- **Share Live Location** (blue; navigates to Contacts)
 
----
-
-## 6. Interaction Principles
-
-- **Clarity over cleverness**:
-  - When tracking is on, make it *obvious* (color + text).
-- **No hidden behavior**:
-  - No silent background tracking without user opt-in and clear explanation.
-- **Emergency is sacred**:
-  - Emergency Mode should:
-    - Look serious
-    - Require deliberate tap (optional confirm)
-    - Provide immediate feedback (e.g., color change, text change, state badge)
+Home does **not** contain:
+- Active shares list
+- History list
 
 ---
 
-## 7. Empty States
+## 6) Contacts Screen — “Who can I share with?”
 
-- Trust contacts empty state:
-  - “You have no trusted contacts yet. You can still share your live location via a link.”
-- History empty state:
-  - “No location history yet. Start tracking to see your past routes.”
-- Home when not tracking:
-  - Status card: “Tracking is OFF. Your location is not being updated.”
+Contact row shows:
+- Avatar initial
+- Name
+- Phone
+- Optional email
+
+Row action:
+- `Share Location Link`
+
+Row state when sharing:
+- pill/dot: `SHARING` or `LIVE`
+- button changes to disabled or `Manage`
+
+---
+
+## 7) Shares Screen — “Who is seeing me right now?”
+
+Shows:
+- Active shares list
+- Status pill: `LIVE` / `STALE`
+- Time remaining (expiration)
+- `Manage` action
+- `+ New Share` button (top-right)
+
+---
+
+## 8) History Screen — “What happened before?”
+
+Each log entry must show:
+- Time
+- Place name + address (if available)
+- Ping type:
+  - `User Ping`
+  - `Trusted Contact Ping — {Contact Name}`
+  - `Emergency` (red emphasis)
+
+Each entry includes:
+- `Location Ping` button (focus map to that ping)
+- `Directions` button (opens system app chooser: Google Maps / Apple Maps / Waze etc.)
+
+---
+
+## 9) Settings Screen
+
+Settings is informational and trust-oriented:
+- Account
+- Location settings
+- Notifications (can be minimal in V1)
+- Subscription
+- Help & Support
+- Log out / Exit Guest Mode
+- Privacy policy / Terms / version
+
+No ping/location action buttons belong on Settings.
+
+---

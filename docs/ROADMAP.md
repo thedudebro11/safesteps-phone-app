@@ -1,122 +1,78 @@
-# SafeSteps – Roadmap
+# SafeSteps — Roadmap
 
+_Last updated: 2026-01-01_
 
-
-## Stage 0 – Foundation (IN PROGRESS)
-
-- [x] Expo + React Native + Expo Router setup
-- [x] Tab navigation (Home, Contacts, History, Settings)
-- [x] Auth screens (login, register)
-- [x] Supabase client, env setup
-- [x] AuthProvider with session persistence
-- [x] Logout from Settings
-- [x] Route protection (auth vs tabs)
-- [x] Home “Welcome, {email}” card
+This roadmap reflects the **locked V1 UX/UI**:
+Tabs: Home / Contacts / Shares / History / Settings.
 
 ---
 
-## Stage 1 – v1 Core (MVP)
+## V1 (Ship)
 
-**Goal:** SafeSteps is usable for a **single user** as a safety tool.
+### V1 Goals
+- A privacy-first, consent-driven location sharing app with:
+  - real-time “Now” map + tracking state
+  - emergency mode (account-only)
+  - recipient-specific live location sharing (share sessions)
+  - location history with map focus + directions
 
-### 1.1 Home (Single User UX)
+### V1 Milestones (Build Order)
+1) **Database schema + RLS**
+   - `trusted_contacts`
+   - `location_pings`
+   - `share_sessions`
+   - `share_recipients` (token hashes)
+2) **Tracking provider (single timer)**
+   - OFF / ACTIVE / EMERGENCY
+   - tier-based frequency clamps
+   - emergency override
+   - signal state derivation (Active/Spotty/Dead)
+3) **Home screen wiring**
+   - status, frequency, actions
+   - coordinates + accuracy + last update
+   - map + accuracy circle
+4) **Contacts**
+   - add/list/remove trusted contacts
+   - start share per contact (`Share Location Link`)
+   - show contact row state when sharing
+5) **Shares**
+   - list active sessions
+   - status pill (LIVE/STALE)
+   - expiration countdown
+   - revoke/end/manage
+   - `+ New Share` funnels to Contacts flow
+6) **History**
+   - list logs with time/place/type/contact
+   - per-row `Location Ping` + `Directions`
+7) **Hardening**
+   - token hashing, revocation, expiration enforcement
+   - rate limits (share creation, token checks)
+   - robust error handling + honest UI states
+   - release checklist
 
-- [ ] Map with user’s blue dot
-- [ ] Live Tracking toggle
-  - [ ] State: Off / Active
-  - [ ] Interval selection (e.g., 30s, 60s, 120s)
-- [ ] Emergency Mode button
-  - [ ] Toggles emergency state
-  - [ ] Faster pings (e.g., every 5–10s)
-
-### 1.2 Tracking & Pings
-
-- [ ] Supabase `location_pings` table
-- [ ] Express `/api/locations` endpoint
-- [ ] Express `/api/history` endpoint
-- [ ] Client tracking loop for Active Tracking
-- [ ] Client tracking loop for Emergency Mode
-
-### 1.3 Trusted Contacts (Basic)
-
-- [ ] Supabase `trusted_contacts` table
-- [ ] Express `/api/contacts` (list/add/delete)
-- [ ] Contacts screen UI
-- [ ] Empty state for single user
-
-### 1.4 History
-
-- [ ] Fetch location history from `/api/history`
-- [ ] List view with normal vs emergency pings
-- [ ] Clear visual highlight for emergency events
-
-### 1.5 Privacy & Settings
-
-- [ ] Settings copy explaining:
-  - No “always-on” requirement
-  - No silent tracking
-  - No third-party analytics
-- [ ] Optional: toggle for “Allow background tracking” (tech exploration)
-
----
-
-## Stage 2 – v1.1+ (Enhancements)
-
-- [ ] Live location share links:
-  - [ ] `share_links` table
-  - [ ] `POST /api/share-links` → create link
-  - [ ] `GET /s/:token` → read-only last known location
-- [ ] Improved map experience:
-  - [ ] Last known location marker in History
-  - [ ] Tap ping → view on map
-- [ ] Basic battery/performance tuning
-
----
-### Sharing (v1 signature feature, Option B)
-
-Implement recipient-scoped live sharing:
-
-- Share sessions have:
-  - explicit expiration
-  - explicit on/off state
-- Links are per-recipient (one link per recipient)
-- Tokens are stored hashed (no raw tokens in DB)
-- Share viewer endpoint is public but rate-limited and minimal-data
-
-Guest support:
-- Guest mode remains local-only by default.
-- When a guest starts sharing, the server temporarily stores only the minimum live snapshot needed to serve the viewer until expiration/off, then deletes it.
-
-
-## Stage 3 – v2 (Family / Circles)
-
-- [ ] Support multi-user “circles”:
-  - [ ] Show contacts’ locations on Home map
-  - [ ] Simple presence indicator (online/recently active)
-- [ ] Optional background tracking mode (opt-in, clearly explained)
-- [ ] Emergency notifications (email/SMS):
-  - [ ] Integration with email/SMS provider
-  - [ ] Opt-in per contact
+### Explicit non-goals in V1
+- always-on background tracking
+- danger detection / “kidnapping detection”
+- full family map / continuous mutual tracking
+- ads, analytics, telemetry
 
 ---
 
-## Stage 4 – Scale & Quality
+## V2 (Stabilize + Expand)
 
-- [ ] E2E tests for critical flows (login, tracking, emergency)
-- [ ] Basic CI pipeline:
-  - [ ] Lint + test on push
-- [ ] EAS build + Play Store release
-- [ ] Monitoring/logging strategy:
-  - [ ] Capture backend errors
-  - [ ] Minimal operational metrics
+- Share viewer page improvements (recipient controls: stop receiving/block)
+- Optional push notifications (share started/stopped, emergency started)
+- Premium management polish + billing integration
+- Better offline behavior + queueing
+- Extended history tiers (7–30 days)
 
 ---
 
-## Stage 5 – Premium (Optional)
+## V3 (Advanced)
 
-- [ ] Premium tiers:
-  - [ ] Extra contacts
-  - [ ] Extended history (beyond 7–30 days)
-  - [ ] Family map features
-- [ ] Stripe integration for subscriptions
-- [ ] Feature gating in-app
+- Family/circle mutual sharing (explicit sessions, never ambient)
+- Background tracking (opt-in “Ready Mode” concept, if ever)
+- Advanced abuse prevention heuristics
+- Hardware add-ons / integrations (future)
+
+---
