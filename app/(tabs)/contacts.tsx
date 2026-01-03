@@ -18,6 +18,7 @@ import { confirm } from "@/src/lib/confirm";
 import { useTracking } from "@/src/features/tracking/TrackingProvider";
 
 
+
 const BG = "#050814";
 const CARD_BG = "#0c1020";
 const BORDER = "#1a2035";
@@ -35,14 +36,10 @@ export default function ContactsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ share?: string }>();
   const inShareMode = params.share === "1";
-  const { mode } = useTracking();
-  const canShare = mode !== "idle";
-
-
   const { contacts, addContact, removeContact, isLoaded } = useContacts();
-  const { createShareForContact, getActiveShareByContactId, endShare } =
-    useShares();
-
+  const { createShareForContact, getActiveShareByContactId, getActiveShares, endShare } = useShares();
+  const { mode, stopEmergency } = useTracking();
+  const canShare = mode !== "idle";
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<ContactFormState>({
     name: "",
@@ -54,6 +51,10 @@ export default function ContactsScreen() {
     if (!inShareMode) return "Manage trusted contacts for sharing and emergency.";
     return "Choose a trusted contact to share your live location.";
   }, [inShareMode]);
+
+  
+
+
 
   async function onCreateContact() {
     try {
@@ -93,10 +94,26 @@ export default function ContactsScreen() {
 
 
   async function onStopShare(contactId: string) {
-    const active = getActiveShareByContactId(contactId);
-    if (!active) return;
-    await endShare(active.id);
+  const active = getActiveShareByContactId(contactId);
+  if (!active) return;
+
+  // Decide BEFORE ending (state updates async)
+  const activeEmergencyShares = getActiveShares().filter((s) => s.reason === "emergency");
+
+  const willStopEmergency =
+    mode === "emergency" &&
+    active.reason === "emergency" &&
+    activeEmergencyShares.length === 1 &&
+    activeEmergencyShares[0].id === active.id;
+
+  await endShare(active.id);
+
+  if (willStopEmergency) {
+    stopEmergency();
   }
+}
+
+
 
   async function onDeleteContact(contactId: string) {
     const ok = await confirm(
@@ -108,8 +125,24 @@ export default function ContactsScreen() {
     if (!ok) return;
 
     const active = getActiveShareByContactId(contactId);
-    if (active) await endShare(active.id);
+    if (active) {
+  const activeEmergencyShares = getActiveShares().filter((s) => s.reason === "emergency");
+
+  const willStopEmergency =
+    mode === "emergency" &&
+    active.reason === "emergency" &&
+    activeEmergencyShares.length === 1 &&
+    activeEmergencyShares[0].id === active.id;
+
+  await endShare(active.id);
+
+  if (willStopEmergency) {
+    stopEmergency();
+  }
+}
+
     await removeContact(contactId);
+
   }
 
 

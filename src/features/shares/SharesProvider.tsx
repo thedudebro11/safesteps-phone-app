@@ -14,7 +14,11 @@ import type { Contact } from "@/src/features/contacts/types";
 type SharesContextValue = {
   shares: ShareSession[];
   isLoaded: boolean;
-  createShareForContact(contact: Contact): Promise<ShareSession>;
+  createShareForContact(
+  contact: Contact,
+  reason?: "manual" | "emergency"
+): Promise<ShareSession>;
+
   endShare(shareId: string): Promise<void>;
   getActiveShareByContactId(contactId: string): ShareSession | undefined;
   getActiveShares(): ShareSession[];
@@ -38,14 +42,14 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoaded) return;
-    writeJson(STORAGE_KEY, shares).catch(() => {});
+    writeJson(STORAGE_KEY, shares).catch(() => { });
   }, [shares, isLoaded]);
 
   const value = useMemo<SharesContextValue>(() => {
     return {
       shares,
       isLoaded,
-      async createShareForContact(contact) {
+      async createShareForContact(contact: Contact, reason: "manual" | "emergency" = "manual") {
         // V1 rule: one active share per contact
         const existing = shares.find(
           (s) => s.contactId === contact.id && s.status === "live"
@@ -61,8 +65,10 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
             email: contact.email,
           },
           status: "live",
+          reason,
           startedAt: new Date().toISOString(),
         };
+
 
         setShares((prev) => [next, ...prev]);
         return next;

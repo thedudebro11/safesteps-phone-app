@@ -7,11 +7,12 @@ import {
     View,
     Pressable,
     FlatList,
-    Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useShares } from "@/src/features/shares/SharesProvider";
 import { confirm } from "@/src/lib/confirm";
+import { useTracking } from "@/src/features/tracking/TrackingProvider";
+
 
 
 const BG = "#050814";
@@ -25,6 +26,11 @@ export default function SharesScreen() {
     const router = useRouter();
     const { shares, getActiveShares, endShare } = useShares();
     const active = getActiveShares();
+    const { mode, stopEmergency } = useTracking();
+
+
+
+
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -78,12 +84,25 @@ export default function SharesScreen() {
                                                 "Cancel"
                                             );
                                             if (!ok) return;
+                                            // Decide BEFORE ending (state updates async)
+                                            const activeEmergencyShares = getActiveShares().filter((s) => s.reason === "emergency");
+                                            const willStopEmergency =
+                                                mode === "emergency" &&
+                                                item.reason === "emergency" &&
+                                                activeEmergencyShares.length === 1 &&
+                                                activeEmergencyShares[0].id === item.id;
+
                                             await endShare(item.id);
+                                            if (willStopEmergency) {
+                                                stopEmergency();
+                                            }
+                                        
                                         }}
                                         style={[styles.smallBtn, styles.smallBtnDanger]}
                                     >
                                         <Text style={styles.smallBtnDangerText}>End</Text>
                                     </Pressable>
+
 
                                 </View>
                             )}

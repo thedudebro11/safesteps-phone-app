@@ -95,3 +95,16 @@ service role keys only server-side (Edge Function / backend)
 All DB access is enforced by RLS.
 
 Share links use high-entropy tokens and store token hashes, not raw tokens.
+
+### Emergency Mode State Coordination
+
+Emergency mode is coordinated across multiple providers:
+
+- TrackingProvider controls tracking state (`idle`, `active`, `emergency`)
+- SharesProvider controls share session lifecycle
+
+To avoid async state race conditions:
+- The app determines whether an action will end the final emergency share **before** mutating share state.
+- Emergency mode is disabled only when the final emergency share is removed.
+
+This pattern prevents stale UI and ensures cross-screen consistency.

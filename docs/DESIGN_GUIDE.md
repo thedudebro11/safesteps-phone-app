@@ -118,6 +118,18 @@ Each entry includes:
 
 ---
 
+## Emergency Sharing Consistency
+
+Emergency tracking and sharing follow strict synchronization rules:
+
+- Emergency mode remains active only while at least one emergency share session exists.
+- Ending the final emergency share from Contacts or Shares immediately disables Emergency mode on Home.
+- Stopping Emergency from Home ends all active emergency share sessions.
+- The app never enters a state where Emergency tracking is active without at least one recipient.
+
+This guarantees predictable behavior, prevents silent battery drain, and ensures user trust.
+
+
 ## 9) Settings Screen
 
 Settings is informational and trust-oriented:
@@ -132,3 +144,18 @@ Settings is informational and trust-oriented:
 No ping/location action buttons belong on Settings.
 
 ---
+
+
+### ADR: Emergency Mode Shutdown Logic
+
+**Decision:**  
+Emergency mode is terminated when — and only when — the final emergency share is removed.
+
+**Reasoning:**  
+React state updates are asynchronous. Checking share state after mutation caused stale reads and UI desync.
+
+**Solution:**  
+Compute whether an action will remove the final emergency share *before* mutating state, then apply both changes atomically.
+
+**Result:**  
+Consistent UX across Home, Contacts, and Shares with no edge-case drift.

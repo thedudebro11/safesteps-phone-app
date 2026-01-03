@@ -8,6 +8,9 @@ import { useRouter } from "expo-router";
 import { AppState } from "react-native";
 import { useShares } from "@/src/features/shares/SharesProvider";
 import { tryLocalNotify } from "@/src/lib/notify";
+import { useContacts } from "@/src/features/contacts/ContactsProvider";
+import { EmergencyRecipientsModal } from "@/src/features/emergency/EmergencyRecipientsModal";
+import { getEmergencyRecipientLimit } from "@/src/lib/tiers";
 
 
 
@@ -21,9 +24,12 @@ const DANGER = "#ff4b5c";
 
 
 
+
 export default function HomeScreen() {
-  const { getActiveShares } = useShares();
+  const { createShareForContact, getActiveShares, endShare } = useShares();
+
   const activeSharesCount = getActiveShares().length;
+
 
   const [showNoShareNudge, setShowNoShareNudge] = React.useState(false);
   const nudgeFiredRef = React.useRef(false);
@@ -44,6 +50,25 @@ export default function HomeScreen() {
     stopEmergency,
     pingOnce,
   } = useTracking();
+  const { contacts } = useContacts();
+
+  const [emergencyModalOpen, setEmergencyModalOpen] = React.useState(false);
+
+  const maxEmergencyRecipients = getEmergencyRecipientLimit({
+    isGuest,
+    isPremium: false, // wire later
+  });
+  async function stopEmergencyEverywhere() {
+    // 1) Stop emergency mode (tracking layer)
+    stopEmergency();
+
+    // 2) End all active emergency shares (sharing layer)
+    const emergencyShares = getActiveShares().filter((s) => s.reason === "emergency");
+    for (const s of emergencyShares) {
+      await endShare(s.id);
+    }
+  }
+
 
 
   // Home should never render without a session because root gating redirects,
@@ -168,7 +193,7 @@ export default function HomeScreen() {
                 Active Tracking uses battery. Click Share Live Location to make it useful.
               </Text>
 
-              
+
             </View>
           )}
 
@@ -214,14 +239,17 @@ export default function HomeScreen() {
             )}
 
             {mode === "emergency" ? (
-              <Pressable style={[styles.actionBtn, styles.btnDanger]} onPress={stopEmergency}>
+              <Pressable style={[styles.actionBtn, styles.btnDanger]} onPress={stopEmergencyEverywhere}>
+
                 <Text style={styles.btnDangerText}>Stop Emergency</Text>
               </Pressable>
             ) : (
-              <Pressable style={[styles.actionBtn, styles.btnDanger]} onPress={startEmergency}>
+              <Pressable style={[styles.actionBtn, styles.btnDanger]} onPress={() => setEmergencyModalOpen(true)}
+              >
                 <Text style={styles.btnDangerText}>Emergency</Text>
               </Pressable>
             )}
+
 
             <Pressable
               disabled={!canShare}
@@ -259,8 +287,22 @@ export default function HomeScreen() {
           <Text style={styles.bodyText}>
             v1 includes secure share links with expiration, recipients, and on/off state.
           </Text>
-        </View>
 
+        </View>
+        {/* Emergency Recipients Picker */}
+        <EmergencyRecipientsModal
+          visible={emergencyModalOpen}
+          contacts={contacts}
+          maxSelectable={maxEmergencyRecipients}
+          onCancel={() => setEmergencyModalOpen(false)}
+          onConfirm={async (selected) => {
+            for (const c of selected) {
+              await createShareForContact(c, "emergency");
+            }
+            setEmergencyModalOpen(false);
+            startEmergency();
+          }}
+        />
         <View style={styles.spacer} />
       </View>
     </SafeAreaView>
@@ -270,48 +312,48 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   nudgeCard: {
-  marginTop: 12,
-  borderWidth: 1,
-  borderColor: BORDER,
-  backgroundColor: "rgba(255,255,255,0.03)",
-  borderRadius: 16,
-  padding: 12,
-  gap: 8,
-},
-nudgeTitle: {
-  color: "#fff",
-  fontWeight: "900",
-  fontSize: 13,
-},
-nudgeText: {
-  color: MUTED,
-  fontSize: 12,
-  lineHeight: 16,
-},
-nudgeBtn: {
-  borderRadius: 14,
-  paddingVertical: 10,
-  paddingHorizontal: 12,
-  borderWidth: 1,
-},
-nudgeBtnPrimary: {
-  borderColor: ACCENT,
-  backgroundColor: "rgba(56,150,255,0.16)",
-},
-nudgeBtnPrimaryText: {
-  color: "#fff",
-  fontWeight: "900",
-  fontSize: 12,
-},
-nudgeBtnGhost: {
-  borderColor: BORDER,
-  backgroundColor: "transparent",
-},
-nudgeBtnGhostText: {
-  color: MUTED,
-  fontWeight: "900",
-  fontSize: 12,
-},
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 16,
+    padding: 12,
+    gap: 8,
+  },
+  nudgeTitle: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 13,
+  },
+  nudgeText: {
+    color: MUTED,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  nudgeBtn: {
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+  },
+  nudgeBtnPrimary: {
+    borderColor: ACCENT,
+    backgroundColor: "rgba(56,150,255,0.16)",
+  },
+  nudgeBtnPrimaryText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  nudgeBtnGhost: {
+    borderColor: BORDER,
+    backgroundColor: "transparent",
+  },
+  nudgeBtnGhostText: {
+    color: MUTED,
+    fontWeight: "900",
+    fontSize: 12,
+  },
 
   pill: {
     borderWidth: 1,

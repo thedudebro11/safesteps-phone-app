@@ -1,6 +1,5 @@
-// src/features/shares/types.ts
-
 export type ShareStatus = "live" | "ended";
+export type ShareReason = "manual" | "emergency";
 
 export type ShareContactSnapshot = {
   name: string;
@@ -13,6 +12,7 @@ export type ShareSession = {
   contactId: string;
   contactSnapshot: ShareContactSnapshot;
   status: ShareStatus;
+  reason: ShareReason;
   startedAt: string;
   endedAt?: string;
 };
