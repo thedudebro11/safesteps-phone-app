@@ -94,6 +94,16 @@ To keep the UX honest and predictable, sharing is gated by tracking state.
 
 This keeps the app state truthful and avoids creating invalid share sessions.
 
+### Delayed “No Share” Nudge (Battery Honesty)
+
+When Active Tracking starts, SafeSteps waits ~25 seconds. If no live shares exist, the app nudges the user to share a link to avoid wasting battery.
+
+- Does **not** nag immediately.
+- Fires **once per Active session**.
+- Clears automatically once a share is created.
+- If the app is backgrounded, SafeSteps attempts a local notification (optional; requires expo-notifications and granted permission).
+
+
 
 ✅ UX flow
 - Home → “Share Live Location” → navigates to Contacts in share mode (`/contacts?share=1`)

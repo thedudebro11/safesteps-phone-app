@@ -5,6 +5,10 @@ import { useAuth } from "@/src/features/auth/AuthProvider";
 import { Pressable } from "react-native";
 import { useTracking } from "@/src/features/tracking/TrackingProvider";
 import { useRouter } from "expo-router";
+import { AppState } from "react-native";
+import { useShares } from "@/src/features/shares/SharesProvider";
+import { tryLocalNotify } from "@/src/lib/notify";
+
 
 
 
@@ -18,6 +22,13 @@ const DANGER = "#ff4b5c";
 
 
 export default function HomeScreen() {
+  const { getActiveShares } = useShares();
+  const activeSharesCount = getActiveShares().length;
+
+  const [showNoShareNudge, setShowNoShareNudge] = React.useState(false);
+  const nudgeFiredRef = React.useRef(false);
+  const appStateRef = React.useRef(AppState.currentState);
+
   const router = useRouter();
   const { user, isGuest, hasSession, isAuthLoaded } = useAuth();
 
@@ -61,6 +72,55 @@ export default function HomeScreen() {
       </SafeAreaView>
     );
   }
+
+  React.useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      appStateRef.current = nextState;
+    });
+    return () => sub.remove();
+  }, []);
+
+  React.useEffect(() => {
+    // Reset when leaving active mode
+    if (mode !== "active") {
+      nudgeFiredRef.current = false;
+      setShowNoShareNudge(false);
+      return;
+    }
+
+    // If they have shares, no nudge.
+    if (activeSharesCount > 0) {
+      setShowNoShareNudge(false);
+      return;
+    }
+
+    // Only fire once per active session
+    if (nudgeFiredRef.current) return;
+
+    const ms = 25_000; // 25 seconds (tweak 20–30s as desired)
+    const t = setTimeout(async () => {
+      // Re-check current truth at fire time
+      if (mode !== "active") return;
+      if (getActiveShares().length > 0) return;
+
+      nudgeFiredRef.current = true;
+      setShowNoShareNudge(true);
+
+      // If they left the app, attempt a local notification (optional)
+      if (appStateRef.current !== "active") {
+        await tryLocalNotify(
+          "SafeSteps: Tracking is on",
+          "You haven’t shared your live location yet. Open SafeSteps to share and avoid wasting battery."
+        );
+      }
+    }, ms);
+
+    return () => clearTimeout(t);
+    // NOTE: We intentionally depend on mode + count only.
+    // getActiveShares() is read again at fire time for correctness.
+  }, [mode, activeSharesCount, getActiveShares]);
+
+
   const canShare = mode !== "idle";
   const primaryLabel = isGuest
     ? "Guest session"
@@ -89,6 +149,7 @@ export default function HomeScreen() {
           <Text style={styles.bodyText}>{secondaryText}</Text>
         </View>
 
+
         {/* Placeholder for next v1 controls */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Tracking</Text>
@@ -99,6 +160,18 @@ export default function HomeScreen() {
               {mode === "idle" ? "OFF" : mode === "active" ? "ACTIVE" : "EMERGENCY"}
             </Text>
           </Text>
+
+          {mode === "active" && activeSharesCount === 0 && showNoShareNudge && (
+            <View style={styles.nudgeCard}>
+              <Text style={styles.nudgeTitle}>Tracking is on, but you’re not sharing yet</Text>
+              <Text style={styles.nudgeText}>
+                Active Tracking uses battery. Click Share Live Location to make it useful.
+              </Text>
+
+              
+            </View>
+          )}
+
 
           <Text style={[styles.bodyText, { marginTop: 6 }]}>
             Frequency:{" "}
@@ -196,6 +269,50 @@ export default function HomeScreen() {
 
 
 const styles = StyleSheet.create({
+  nudgeCard: {
+  marginTop: 12,
+  borderWidth: 1,
+  borderColor: BORDER,
+  backgroundColor: "rgba(255,255,255,0.03)",
+  borderRadius: 16,
+  padding: 12,
+  gap: 8,
+},
+nudgeTitle: {
+  color: "#fff",
+  fontWeight: "900",
+  fontSize: 13,
+},
+nudgeText: {
+  color: MUTED,
+  fontSize: 12,
+  lineHeight: 16,
+},
+nudgeBtn: {
+  borderRadius: 14,
+  paddingVertical: 10,
+  paddingHorizontal: 12,
+  borderWidth: 1,
+},
+nudgeBtnPrimary: {
+  borderColor: ACCENT,
+  backgroundColor: "rgba(56,150,255,0.16)",
+},
+nudgeBtnPrimaryText: {
+  color: "#fff",
+  fontWeight: "900",
+  fontSize: 12,
+},
+nudgeBtnGhost: {
+  borderColor: BORDER,
+  backgroundColor: "transparent",
+},
+nudgeBtnGhostText: {
+  color: MUTED,
+  fontWeight: "900",
+  fontSize: 12,
+},
+
   pill: {
     borderWidth: 1,
     borderColor: BORDER,
@@ -244,21 +361,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
   },
-shareBtn: {
-  borderWidth: 1,
-  borderColor: ACCENT,
-  backgroundColor: "rgba(56,150,255,0.16)",
-  paddingHorizontal: 14,
-  paddingVertical: 12,
-  borderRadius: 14,
-  alignItems: "center",
-  justifyContent: "center",
-},
-shareBtnText: {
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: "900",
-},
+  shareBtn: {
+    borderWidth: 1,
+    borderColor: ACCENT,
+    backgroundColor: "rgba(56,150,255,0.16)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shareBtnText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+  },
 
 
   safeArea: {
