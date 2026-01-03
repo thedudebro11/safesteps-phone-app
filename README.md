@@ -70,6 +70,31 @@ This repository is under active development and **not yet released to app stores
 - End share from **Contacts** or **Shares**
 - Sessions stored locally (same storage rules)
 
+### Sharing Preconditions (UX Guardrail)
+
+Live location sharing is only allowed when **Active Tracking is running**.
+
+#### Why
+A share session without active tracking would be misleading — no location updates would be sent.  
+To keep the UX honest and predictable, sharing is gated by tracking state.
+
+#### Behavior
+- If tracking mode is `idle`:
+  - “Share Live Location” button on Home is **disabled**
+  - “Share Location Link” buttons in Contacts are **disabled and dimmed**
+  - No share session can be created
+- If tracking mode is `active` or `emergency`:
+  - Share buttons enable automatically
+  - User can start or stop shares normally
+
+#### Implementation
+- Gating is UI-level (no prompts, no redirects)
+- Uses `TrackingProvider.mode !== "idle"` as the single source of truth
+- Share handlers also hard-guard against accidental invocation when disabled
+
+This keeps the app state truthful and avoids creating invalid share sessions.
+
+
 ✅ UX flow
 - Home → “Share Live Location” → navigates to Contacts in share mode (`/contacts?share=1`)
 - Contacts show SHARING indicator per active session

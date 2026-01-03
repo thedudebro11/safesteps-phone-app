@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useContacts } from "@/src/features/contacts/ContactsProvider";
 import { useShares } from "@/src/features/shares/SharesProvider";
 import { confirm } from "@/src/lib/confirm";
+import { useTracking } from "@/src/features/tracking/TrackingProvider";
 
 
 const BG = "#050814";
@@ -34,6 +35,9 @@ export default function ContactsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ share?: string }>();
   const inShareMode = params.share === "1";
+  const { mode } = useTracking();
+  const canShare = mode !== "idle";
+
 
   const { contacts, addContact, removeContact, isLoaded } = useContacts();
   const { createShareForContact, getActiveShareByContactId, endShare } =
@@ -70,10 +74,12 @@ export default function ContactsScreen() {
   }
 
   async function onShare(contactId: string) {
+    if (!canShare) return; // hard stop (prevents any accidental presses)
+
     const contact = contacts.find((c) => c.id === contactId);
     if (!contact) return;
 
-    await createShareForContact(contact);
+    const session = await createShareForContact(contact);
 
     Alert.alert(
       "Sharing started",
@@ -84,6 +90,7 @@ export default function ContactsScreen() {
       ]
     );
   }
+
 
   async function onStopShare(contactId: string) {
     const active = getActiveShareByContactId(contactId);
@@ -120,16 +127,7 @@ export default function ContactsScreen() {
           </Pressable>
         </View>
 
-        {inShareMode && (
-          <View style={styles.banner}>
-            <Text style={styles.bannerTitle}>Share Live Location</Text>
-            <Text style={styles.bannerText}>
-              Select a trusted contact and tap{" "}
-              <Text style={{ color: "#fff" }}>Share Location Link</Text>. You can
-              stop sharing anytime.
-            </Text>
-          </View>
-        )}
+
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Trusted Contacts</Text>
@@ -169,12 +167,16 @@ export default function ContactsScreen() {
                       {!active ? (
                         <Pressable
                           onPress={() => onShare(item.id)}
-                          style={[styles.smallBtn, styles.smallBtnPrimary]}
+                          disabled={!canShare}
+                          style={[
+                            styles.smallBtn,
+                            styles.smallBtnPrimary,
+                            !canShare && styles.btnDisabled,
+                          ]}
                         >
-                          <Text style={styles.smallBtnPrimaryText}>
-                            Share Location Link
-                          </Text>
+                          <Text style={styles.smallBtnPrimaryText}>Share Location Link</Text>
                         </Pressable>
+
                       ) : (
                         <Pressable
                           onPress={() => onStopShare(item.id)}
@@ -267,6 +269,9 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   title: { color: "#fff", fontSize: 22, fontWeight: "900" },
   subtitle: { color: MUTED, fontSize: 13, marginTop: 4 },
+
+  btnDisabled: { opacity: 0.45 },
+
 
   addBtn: {
     borderWidth: 1,

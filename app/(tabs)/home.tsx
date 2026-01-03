@@ -20,6 +20,7 @@ const DANGER = "#ff4b5c";
 export default function HomeScreen() {
   const router = useRouter();
   const { user, isGuest, hasSession, isAuthLoaded } = useAuth();
+
   const {
     mode,
     frequencySec,
@@ -60,7 +61,7 @@ export default function HomeScreen() {
       </SafeAreaView>
     );
   }
-
+  const canShare = mode !== "idle";
   const primaryLabel = isGuest
     ? "Guest session"
     : user?.email ?? "Signed in";
@@ -150,11 +151,18 @@ export default function HomeScreen() {
             )}
 
             <Pressable
-              style={[styles.actionBtn, styles.btnOutline]}
+              disabled={!canShare}
               onPress={() => router.push("/contacts?share=1")}
+              style={[
+                styles.shareBtn,
+                !canShare && { opacity: 0.45 },
+              ]}
             >
-              <Text style={styles.btnOutlineText}>Share Live Location</Text>
+              <Text style={styles.shareBtnText}>
+                Share Live Location
+              </Text>
             </Pressable>
+
 
           </View>
 
@@ -185,6 +193,7 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   pill: {
@@ -235,6 +244,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
   },
+shareBtn: {
+  borderWidth: 1,
+  borderColor: ACCENT,
+  backgroundColor: "rgba(56,150,255,0.16)",
+  paddingHorizontal: 14,
+  paddingVertical: 12,
+  borderRadius: 14,
+  alignItems: "center",
+  justifyContent: "center",
+},
+shareBtnText: {
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: "900",
+},
 
 
   safeArea: {
