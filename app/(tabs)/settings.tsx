@@ -29,7 +29,7 @@ export default function SettingsScreen() {
     try {
       await signOut();
       console.log("[Settings] signOut() completed, navigating to /login");
-      router.replace("/login");
+      
     } catch (err) {
       console.error("[Settings] Error during signOut:", err);
     }

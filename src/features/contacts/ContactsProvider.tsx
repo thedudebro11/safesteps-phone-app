@@ -9,6 +9,8 @@ import React, {
 import { readJson, writeJson } from "@/src/lib/storage";
 import { createId } from "@/src/lib/ids";
 import type { Contact, CreateContactInput } from "./types";
+import { getTrustedContactLimit } from "@/src/lib/tiers";
+import { useAuth } from "@/src/features/auth/AuthProvider";
 
 type ContactsContextValue = {
   contacts: Contact[];
@@ -42,6 +44,9 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  const { isGuest } = useAuth();
+  const isPremium = false; // wire later
+
   useEffect(() => {
     (async () => {
       const saved = await readJson<Contact[]>(STORAGE_KEY, []);
@@ -59,9 +64,12 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
     return {
       contacts,
       isLoaded,
+
       async addContact(input) {
         const name = input.name.trim();
         if (!name) throw new Error("Name is required.");
+
+        const limit = getTrustedContactLimit({ isGuest, isPremium });
 
         const next: Contact = {
           id: createId("ct"),
@@ -71,12 +79,27 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
           createdAt: new Date().toISOString(),
         };
 
-        setContacts((prev) => [next, ...prev]);
+        // Bulletproof: enforce limit using the *latest* state at mutation time
+        let didAdd = false;
+
+        setContacts((prev) => {
+          if (prev.length >= limit) return prev;
+          didAdd = true;
+          return [next, ...prev];
+        });
+
+        // If we didn't add, the limit was reached at the actual commit moment
+        if (!didAdd) {
+          throw new Error(`Trusted contact limit reached (${limit}).`);
+        }
+
         return next;
       },
+
       async removeContact(contactId) {
         setContacts((prev) => prev.filter((c) => c.id !== contactId));
       },
+
       async updateContact(contactId, patch) {
         setContacts((prev) =>
           prev.map((c) =>
@@ -97,11 +120,12 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
           )
         );
       },
+
       getContact(contactId) {
         return contacts.find((c) => c.id === contactId);
       },
     };
-  }, [contacts, isLoaded]);
+  }, [contacts, isLoaded, isGuest, isPremium]);
 
   return (
     <ContactsContext.Provider value={value}>{children}</ContactsContext.Provider>

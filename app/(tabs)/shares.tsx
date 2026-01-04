@@ -12,6 +12,8 @@ import { useRouter } from "expo-router";
 import { useShares } from "@/src/features/shares/SharesProvider";
 import { confirm } from "@/src/lib/confirm";
 import { useTracking } from "@/src/features/tracking/TrackingProvider";
+import { shouldStopEmergencyAfterEndingShare } from "@/src/features/shares/emergencySync";
+
 
 
 
@@ -85,18 +87,19 @@ export default function SharesScreen() {
                                             );
                                             if (!ok) return;
                                             // Decide BEFORE ending (state updates async)
-                                            const activeEmergencyShares = getActiveShares().filter((s) => s.reason === "emergency");
-                                            const willStopEmergency =
-                                                mode === "emergency" &&
-                                                item.reason === "emergency" &&
-                                                activeEmergencyShares.length === 1 &&
-                                                activeEmergencyShares[0].id === item.id;
+                                            const activeBefore = getActiveShares();
+
+                                            const willStopEmergency = shouldStopEmergencyAfterEndingShare({
+                                                mode,
+                                                endingShare: item,
+                                                activeShares: activeBefore,
+                                            });
 
                                             await endShare(item.id);
-                                            if (willStopEmergency) {
-                                                stopEmergency();
-                                            }
-                                        
+
+                                            if (willStopEmergency) stopEmergency();
+
+
                                         }}
                                         style={[styles.smallBtn, styles.smallBtnDanger]}
                                     >

@@ -13,11 +13,11 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
-import { useAuth } from "@/src/features/auth/AuthProvider";
 import { useContacts } from "@/src/features/contacts/ContactsProvider";
 import { useShares } from "@/src/features/shares/SharesProvider";
 import { confirm } from "@/src/lib/confirm";
 import { useTracking } from "@/src/features/tracking/TrackingProvider";
+import { shouldStopEmergencyAfterEndingShare } from "@/src/features/shares/emergencySync";
 
 const BG = "#050814";
 const CARD_BG = "#0c1020";
@@ -37,23 +37,13 @@ export default function ContactsScreen() {
   const params = useLocalSearchParams<{ share?: string }>();
   const inShareMode = params.share === "1";
 
-  // Auth (for guest limit)
-  const { isGuest } = useAuth();
-
-  // Providers
   const { contacts, addContact, removeContact, isLoaded } = useContacts();
   const { createShareForContact, getActiveShareByContactId, getActiveShares, endShare } =
     useShares();
   const { mode, stopEmergency } = useTracking();
 
-  // Derived state
   const canShare = mode !== "idle";
 
-  // Guest contact limit (v1)
-  const guestContactLimit = 1;
-  const isGuestAtLimit = isGuest && contacts.length >= guestContactLimit;
-
-  // UI state
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<ContactFormState>({
     name: "",
@@ -66,28 +56,7 @@ export default function ContactsScreen() {
     return "Choose a trusted contact to share your live location.";
   }, [inShareMode]);
 
-  function openAddContact() {
-    if (isGuestAtLimit) {
-      Alert.alert(
-        "Guest limit reached",
-        "Guest accounts can add 1 trusted contact. Create an account to add more."
-      );
-      return;
-    }
-    setModalOpen(true);
-  }
-
   async function onCreateContact() {
-    // Safety gate (even if modal is open somehow)
-    if (isGuest && contacts.length >= guestContactLimit) {
-      Alert.alert(
-        "Guest limit reached",
-        "Guest accounts can add 1 trusted contact. Create an account to add more."
-      );
-      setModalOpen(false);
-      return;
-    }
-
     try {
       const created = await addContact({
         name: form.name,
@@ -124,26 +93,21 @@ export default function ContactsScreen() {
     );
   }
 
-  // If we end the last emergency share, stop Emergency mode
-  async function maybeStopEmergencyIfLast(shareId: string) {
-    const activeEmergencyShares = getActiveShares().filter((s) => s.reason === "emergency");
+  async function onStopShare(contactId: string) {
+    const activeShare = getActiveShareByContactId(contactId);
+    if (!activeShare) return;
 
-    const willStopEmergency =
-      mode === "emergency" &&
-      activeEmergencyShares.length === 1 &&
-      activeEmergencyShares[0].id === shareId;
+    const activeBefore = getActiveShares();
+
+    const willStopEmergency = shouldStopEmergencyAfterEndingShare({
+      mode,
+      endingShare: activeShare,
+      activeShares: activeBefore,
+    });
+
+    await endShare(activeShare.id);
 
     if (willStopEmergency) stopEmergency();
-  }
-
-  async function onStopShare(contactId: string) {
-    const active = getActiveShareByContactId(contactId);
-    if (!active) return;
-
-    // Decide BEFORE ending (state updates async)
-    await maybeStopEmergencyIfLast(active.id);
-
-    await endShare(active.id);
   }
 
   async function onDeleteContact(contactId: string) {
@@ -155,10 +119,19 @@ export default function ContactsScreen() {
     );
     if (!ok) return;
 
-    const active = getActiveShareByContactId(contactId);
-    if (active) {
-      await maybeStopEmergencyIfLast(active.id);
-      await endShare(active.id);
+    const activeShare = getActiveShareByContactId(contactId);
+    if (activeShare) {
+      const activeBefore = getActiveShares();
+
+      const willStopEmergency = shouldStopEmergencyAfterEndingShare({
+        mode,
+        endingShare: activeShare,
+        activeShares: activeBefore,
+      });
+
+      await endShare(activeShare.id);
+
+      if (willStopEmergency) stopEmergency();
     }
 
     await removeContact(contactId);
@@ -173,11 +146,8 @@ export default function ContactsScreen() {
             <Text style={styles.subtitle}>{headerSubtitle}</Text>
           </View>
 
-          <Pressable
-            onPress={openAddContact}
-            style={[styles.addBtn, isGuestAtLimit && styles.btnDisabled]}
-          >
-            <Text style={styles.addBtnText}>{isGuestAtLimit ? "Limit" : "+ Add"}</Text>
+          <Pressable onPress={() => setModalOpen(true)} style={styles.addBtn}>
+            <Text style={styles.addBtnText}>+ Add</Text>
           </Pressable>
         </View>
 

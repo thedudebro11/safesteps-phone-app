@@ -84,3 +84,22 @@ Format: Maintain **[Unreleased]**, cut releases when versions are tagged.
 - Storage adapter (web localStorage, native AsyncStorage, fallback in-memory)
 - Shares tab + sessions UI
 - Cross-platform confirm helper for web/native destructive actions
+
+# Changelog
+
+## Unreleased
+
+### Fixed
+- Emergency mode now stays in sync across Home / Contacts / Shares:
+  - Stopping the last emergency share from Contacts or Shares stops Emergency on Home.
+  - Stopping Emergency on Home ends all emergency shares everywhere.
+
+### Added
+- Emergency recipient picker polish:
+  - Enforces selection limit (guest = 1)
+  - Clear UI copy + selection count
+  - Tap-outside-to-close behavior without stealing touches inside modal
+
+### Updated
+- Trusted Contacts limit now enforced centrally by ContactsProvider using tier rules.
+  - Contacts screen relies on provider enforcement (prevents UI/logic mismatch).

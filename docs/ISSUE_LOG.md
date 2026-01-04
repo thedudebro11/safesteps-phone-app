@@ -228,3 +228,9 @@ When the `onPress` of the destructive Alert action didn’t run, the app silentl
   ```ts
   await signOut();
   router.replace("/login");
+
+
+# Known Issues / Next Improvements
+
+- Contacts screen should show a nicer, non-alert UX when contact limit reached
+  - Example: disable “+ Add” and show inline banner with “Upgrade to add more contacts”
