@@ -1,4 +1,5 @@
 // src/lib/supabase.ts
+import "react-native-url-polyfill/auto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
@@ -12,50 +13,58 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Common storage adapter shape Supabase expects
+// Supabase expects a storage-like interface.
+// On web, it can be sync. On native, SecureStore is async.
 type StorageAdapter = {
-  getItem: (key: string) => Promise<string | null>;
-  setItem: (key: string, value: string) => Promise<void>;
-  removeItem: (key: string) => Promise<void>;
+  getItem: (key: string) => Promise<string | null> | string | null;
+  setItem: (key: string, value: string) => Promise<void> | void;
+  removeItem: (key: string) => Promise<void> | void;
 };
 
-let authStorage: StorageAdapter;
+const webLocalStorage: StorageAdapter = {
+  getItem: (key: string) => {
+    if (typeof window === "undefined") return null;
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      // ignore
+    }
+  },
+  removeItem: (key: string) => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  },
+};
 
-if (Platform.OS === "web") {
-  // Web: expo-secure-store doesn't work here.
-  // Use an in-memory fallback so the app doesn't crash on web.
-  const memoryStore = new Map<string, string>();
+const nativeSecureStorage: StorageAdapter = {
+  getItem: (key: string) => SecureStore.getItemAsync(key),
+  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+};
 
-  authStorage = {
-    getItem: async (key: string) => {
-      return memoryStore.get(key) ?? null;
-    },
-    setItem: async (key: string, value: string) => {
-      memoryStore.set(key, value);
-    },
-    removeItem: async (key: string) => {
-      memoryStore.delete(key);
-    },
-  };
-} else {
-  // Native (iOS / Android): real secure storage
-  authStorage = {
-    getItem: (key: string) => SecureStore.getItemAsync(key),
-    setItem: (key: string, value: string) =>
-      SecureStore.setItemAsync(key, value),
-    removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-  };
-}
+const authStorage: StorageAdapter = Platform.OS === "web" ? webLocalStorage : nativeSecureStorage;
 
-export const supabase: SupabaseClient = createClient(
-  supabaseUrl,
-  supabaseAnonKey,
-  {
-    auth: {
-      storage: authStorage as any,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  }
-);
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: authStorage as any,
+    persistSession: true,
+    autoRefreshToken: true,
+
+    // Important:
+    // - web: true so OAuth redirect/session-in-url can be captured if you ever enable it
+    // - native: false (no window URL session parsing)
+    detectSessionInUrl: Platform.OS === "web",
+  },
+});

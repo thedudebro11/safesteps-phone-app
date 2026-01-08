@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import * as Location from "expo-location";
 import { Alert, Platform } from "react-native";
 import { useAuth } from "@/src/features/auth/AuthProvider";
+import { supabase } from "@/src/lib/supabase";
+
 
 type TrackingMode = "idle" | "active" | "emergency";
 
@@ -28,6 +30,7 @@ type TrackingActions = {
 const TrackingContext = createContext<(TrackingState & TrackingActions) | null>(null);
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/+$/, "") ?? "";
+console.log("API_BASE_URL:", process.env.EXPO_PUBLIC_API_BASE_URL);
 
 function nowMs() {
   return Date.now();
@@ -39,12 +42,23 @@ async function getForegroundPermissionOrThrow(): Promise<void> {
     throw new Error("Location permission not granted.");
   }
 }
+async function getAccessTokenSafe(): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
 
 async function getOneFix() {
   // Balanced defaults. We’ll tune later for battery/accuracy tradeoffs.
   const loc = await Location.getCurrentPositionAsync({
     accuracy: Location.Accuracy.Balanced,
   });
+
+
+
 
   return {
     lat: loc.coords.latitude,
@@ -61,6 +75,26 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   const { session, isGuest } = useAuth();
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isGuestRef = useRef(isGuest);
+
+  const stopInterval = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    isGuestRef.current = isGuest;
+  }, [isGuest]);
+  useEffect(() => {
+    if (isGuest) {
+      stopInterval();
+      setMode("idle");
+    }
+  }, [isGuest]);
+
+
 
   const [mode, setMode] = useState<TrackingMode>("idle");
   const [frequencySec, setFrequencySec] = useState<TrackingFrequency>(60);
@@ -70,14 +104,6 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
   const isRunning = mode !== "idle";
 
-  const accessToken = session?.access_token ?? null;
-
-  const stopInterval = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  };
 
   const ensurePermission = async () => {
     try {
@@ -100,66 +126,82 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     timestampMs: number;
   }) => {
     // Guest mode is local-only by design. For now, we just log.
-    if (isGuest) {
-      // eslint-disable-next-line no-console
+    if (isGuestRef.current) {
       console.log("[Tracking] Guest ping (local-only)", payload);
-      return;
+      return { ok: true, guest: true };
     }
+
 
     if (!API_BASE_URL) {
       // eslint-disable-next-line no-console
       console.warn("[Tracking] Missing EXPO_PUBLIC_API_BASE_URL — ping not sent.");
-      return;
-    }
-
-    if (!accessToken) {
-      // eslint-disable-next-line no-console
-      console.warn("[Tracking] Missing access token — ping not sent.");
-      return;
+      throw new Error("Missing EXPO_PUBLIC_API_BASE_URL");
     }
 
     const endpoint = payload.isEmergency ? "/api/emergency" : "/api/locations";
 
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        lat: payload.lat,
-        lng: payload.lng,
-        accuracyM: payload.accuracyM,
-        altitudeM: payload.altitudeM,
-        headingDeg: payload.headingDeg,
-        speedMps: payload.speedMps,
-        timestampMs: payload.timestampMs,
-      }),
-    });
+    // Pull token from Supabase directly to avoid stale session object issues.
+    const token = await getAccessTokenSafe();
+
+    if (!token) {
+      // eslint-disable-next-line no-console
+      console.warn("[Tracking] Missing access token — sending WITHOUT Authorization header (dev).");
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          lat: payload.lat,
+          lng: payload.lng,
+          accuracyM: payload.accuracyM,
+          altitudeM: payload.altitudeM,
+          headingDeg: payload.headingDeg,
+          speedMps: payload.speedMps,
+          timestampMs: payload.timestampMs,
+        }),
+      });
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.warn("[Tracking] Network error", e?.message ?? e);
+      throw e;
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`Ping failed (${res.status}): ${text || "Unknown error"}`);
     }
+
+    const json = await res.json().catch(() => ({}));
+    return json;
   };
 
-  const pingOnce = async () => {
+
+  const pingOnce = async (modeOverride?: TrackingMode) => {
+
     setLastError(null);
 
     try {
       await ensurePermission();
 
       const fix = await getOneFix();
-      const isEmergency = mode === "emergency";
+      const effectiveMode = modeOverride ?? mode;
+      const isEmergency = effectiveMode === "emergency";
 
-      await sendPing({
-        isEmergency,
-        ...fix,
-      });
 
+      const result = await sendPing({ isEmergency, ...fix });
       setLastPingAt(nowMs());
       // eslint-disable-next-line no-console
-      console.log("[Tracking] Ping OK", { mode, frequencySec, isGuest });
+      console.log("[Tracking] Ping OK", { mode: effectiveMode, frequencySec, isGuest: isGuestRef.current, result });
+
+
     } catch (e: any) {
       const msg = e?.message ? String(e.message) : "Unknown tracking error";
       setLastError(msg);
@@ -173,11 +215,12 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
     // Immediately ping once so UI feels responsive
     setMode(nextMode);
-    await pingOnce();
+    await pingOnce(nextMode);
+
 
     intervalRef.current = setInterval(() => {
       // Fire-and-forget; internal errors are tracked in state.
-      void pingOnce();
+      void pingOnce(nextMode);
     }, nextFrequencySec * 1000);
   };
 
@@ -209,7 +252,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       // Emergency overrides any active mode and uses a high-frequency baseline.
       // You can tune this later; for v1 this keeps it simple and explicit.
       const emergencyFreq: TrackingFrequency = 30;
-      setFrequencySec((prev) => (prev === 30 ? prev : prev)); // keep user selection for active; emergency uses its own internally
+      
       await startLoop("emergency", emergencyFreq);
     } catch (e: any) {
       Alert.alert("Location permission required", "SafeSteps needs foreground location permission to send emergency pings.");
