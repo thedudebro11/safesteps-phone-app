@@ -35,7 +35,7 @@ export default function LoginScreen() {
       await signInWithEmail(email.trim(), password);
       // Root layout + hasSession will keep user in tabs,
       // but this makes it snappy.
-      
+      router.replace("/home");
     } catch (err) {
       console.error("[Login] Error during sign in:", err);
       // You can add a toast/Alert here later
@@ -45,7 +45,7 @@ export default function LoginScreen() {
   const handleGuest = async () => {
   try {
     await startGuestSession();
-    
+    router.replace("/home");
   } catch (err) {
     console.error("[Login] Error starting guest session:", err);
   }
