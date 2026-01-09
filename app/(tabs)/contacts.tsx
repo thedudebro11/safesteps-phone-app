@@ -18,6 +18,8 @@ import { useShares } from "@/src/features/shares/SharesProvider";
 import { confirm } from "@/src/lib/confirm";
 import { useTracking } from "@/src/features/tracking/TrackingProvider";
 import { shouldStopEmergencyAfterEndingShare } from "@/src/features/shares/emergencySync";
+import { useAuth } from "@/src/features/auth/AuthProvider";
+
 
 const BG = "#050814";
 const CARD_BG = "#0c1020";
@@ -56,6 +58,10 @@ export default function ContactsScreen() {
     return "Choose a trusted contact to share your live location.";
   }, [inShareMode]);
 
+  const { isGuest } = useAuth();
+  const guestAtLimit = isGuest && contacts.length >= 1;
+
+
   async function onCreateContact() {
     try {
       const created = await addContact({
@@ -81,17 +87,36 @@ export default function ContactsScreen() {
     const contact = contacts.find((c) => c.id === contactId);
     if (!contact) return;
 
-    await createShareForContact(contact);
+    // ✅ If already sharing, don't pretend we "started" it again
+    const existing = getActiveShareByContactId(contactId);
+    if (existing) {
+      Alert.alert(
+        "Already sharing",
+        `Live location sharing is already active for ${contact.name}.`,
+        [
+          { text: "Stay here", style: "cancel" },
+          { text: "View Shares", onPress: () => router.push("/shares") },
+        ]
+      );
+      return;
+    }
 
-    Alert.alert(
-      "Sharing started",
-      `Live location sharing is now active for ${contact.name}.`,
-      [
-        { text: "Stay here", style: "cancel" },
-        { text: "View Shares", onPress: () => router.push("/shares") },
-      ]
-    );
+    try {
+      await createShareForContact(contact);
+
+      Alert.alert(
+        "Sharing started",
+        `Live location sharing is now active for ${contact.name}.`,
+        [
+          { text: "Stay here", style: "cancel" },
+          { text: "View Shares", onPress: () => router.push("/shares") },
+        ]
+      );
+    } catch (e: any) {
+      Alert.alert("Could not start sharing", e?.message ?? "Please try again.");
+    }
   }
+
 
   async function onStopShare(contactId: string) {
     const activeShare = getActiveShareByContactId(contactId);
@@ -144,12 +169,23 @@ export default function ContactsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>Contacts</Text>
             <Text style={styles.subtitle}>{headerSubtitle}</Text>
+
+            {guestAtLimit && (
+              <Text style={[styles.subtitle, { marginTop: 6 }]}>
+                Guest mode can only have 1 trusted contact. Create an account to add more.
+              </Text>
+            )}
           </View>
 
-          <Pressable onPress={() => setModalOpen(true)} style={styles.addBtn}>
+          <Pressable
+            onPress={() => setModalOpen(true)}
+            disabled={guestAtLimit}
+            style={[styles.addBtn, guestAtLimit && { opacity: 0.45 }]}
+          >
             <Text style={styles.addBtnText}>+ Add</Text>
           </Pressable>
         </View>
+
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Trusted Contacts</Text>

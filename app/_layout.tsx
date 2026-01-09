@@ -23,12 +23,14 @@ function RootNavigator() {
 
   // Not logged in (no guest + no user) → force /login
   if (!hasSession && !inAuthGroup) {
-    return <Redirect href="/login" />;
+    return <Redirect href="/(auth)/login" />;
+
   }
 
   // Logged in but currently on auth screens → send to tabs/home
   if (hasSession && inAuthGroup) {
-    return <Redirect href="/home" />;
+    return <Redirect href="/(tabs)/home" />;
+
   }
 
   return <Slot />;

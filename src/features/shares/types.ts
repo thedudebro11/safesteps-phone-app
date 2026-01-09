@@ -9,10 +9,16 @@ export type ShareContactSnapshot = {
 
 export type ShareSession = {
   id: string;
+  token: string; // ✅ add this
   contactId: string;
-  contactSnapshot: ShareContactSnapshot;
-  status: ShareStatus;
-  reason: ShareReason;
+  contactSnapshot: {
+    name: string;
+    phone?: string;
+    email?: string;
+  };
+  status: "live" | "ended";
+  reason: "manual" | "emergency";
   startedAt: string;
   endedAt?: string;
 };
+

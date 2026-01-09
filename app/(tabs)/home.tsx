@@ -186,10 +186,10 @@ export default function HomeScreen() {
               {mode === "emergency"
                 ? "30s (fixed)"
                 : frequencySec === 30
-                ? "30s"
-                : frequencySec === 60
-                ? "1m"
-                : "5m"}
+                  ? "30s"
+                  : frequencySec === 60
+                    ? "1m"
+                    : "5m"}
             </Text>
           </Text>
 
@@ -277,12 +277,18 @@ export default function HomeScreen() {
           maxSelectable={maxEmergencyRecipients}
           onCancel={() => setEmergencyModalOpen(false)}
           onConfirm={async (selected) => {
+            // 1) Create the emergency share(s) first (ensures token exists)
             for (const c of selected) {
               await createShareForContact(c, "emergency");
             }
+
+            // 2) Close modal
             setEmergencyModalOpen(false);
-            startEmergency();
+
+            // 3) THEN start emergency tracking (await so first ping doesn't race)
+            await startEmergency();
           }}
+
         />
 
         <View style={styles.spacer} />

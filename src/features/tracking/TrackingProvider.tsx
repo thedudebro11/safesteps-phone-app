@@ -3,6 +3,8 @@ import * as Location from "expo-location";
 import { Alert, Platform } from "react-native";
 import { useAuth } from "@/src/features/auth/AuthProvider";
 import { supabase } from "@/src/lib/supabase";
+import { useShares } from "@/src/features/shares/SharesProvider";
+
 
 
 type TrackingMode = "idle" | "active" | "emergency";
@@ -83,6 +85,13 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       intervalRef.current = null;
     }
   };
+  const { activeShareToken } = useShares();
+  const activeShareTokenRef = useRef<string | null>(activeShareToken);
+
+  useEffect(() => {
+    activeShareTokenRef.current = activeShareToken;
+  }, [activeShareToken]);
+
 
   useEffect(() => {
     isGuestRef.current = isGuest;
@@ -125,11 +134,17 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     speedMps: number | null;
     timestampMs: number;
   }) => {
-    // Guest mode is local-only by design. For now, we just log.
-    if (isGuestRef.current) {
-      console.log("[Tracking] Guest ping (local-only)", payload);
-      return { ok: true, guest: true };
+    const isGuestNow = isGuestRef.current;
+    const shareToken = activeShareTokenRef.current;
+
+    if (isGuestNow) {
+      // ✅ Option B: guest can only send NETWORK pings if a live share exists
+      if (!shareToken) {
+        console.log("[Tracking] Guest ping blocked (no active share)", payload);
+        return { ok: true, guest: true, blocked: "no_active_share" };
+      }
     }
+
 
 
     if (!API_BASE_URL) {
@@ -166,6 +181,8 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
           headingDeg: payload.headingDeg,
           speedMps: payload.speedMps,
           timestampMs: payload.timestampMs,
+          isGuest: isGuestNow,
+          shareToken: isGuestNow ? shareToken : null,
         }),
       });
     } catch (e: any) {
@@ -252,7 +269,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       // Emergency overrides any active mode and uses a high-frequency baseline.
       // You can tune this later; for v1 this keeps it simple and explicit.
       const emergencyFreq: TrackingFrequency = 30;
-      
+
       await startLoop("emergency", emergencyFreq);
     } catch (e: any) {
       Alert.alert("Location permission required", "SafeSteps needs foreground location permission to send emergency pings.");

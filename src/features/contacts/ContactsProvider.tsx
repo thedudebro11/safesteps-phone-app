@@ -45,6 +45,8 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
 
   const { isGuest } = useAuth();
+
+
   const isPremium = false; // wire later
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoaded) return;
-    writeJson(STORAGE_KEY, contacts).catch(() => {});
+    writeJson(STORAGE_KEY, contacts).catch(() => { });
   }, [contacts, isLoaded]);
 
   const value = useMemo<ContactsContextValue>(() => {
@@ -79,22 +81,28 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
           createdAt: new Date().toISOString(),
         };
 
-        // Bulletproof: enforce limit using the *latest* state at mutation time
         let didAdd = false;
 
         setContacts((prev) => {
+          // ✅ Guest hard cap (1 total)
+          if (isGuest && prev.length >= 1) return prev;
+
+          // ✅ Tier cap (free/premium later)
           if (prev.length >= limit) return prev;
+
           didAdd = true;
           return [next, ...prev];
         });
 
-        // If we didn't add, the limit was reached at the actual commit moment
         if (!didAdd) {
+          if (isGuest) throw new Error("Guest can only have 1 trusted contact.");
           throw new Error(`Trusted contact limit reached (${limit}).`);
         }
 
         return next;
       },
+
+
 
       async removeContact(contactId) {
         setContacts((prev) => prev.filter((c) => c.id !== contactId));
@@ -105,17 +113,17 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
           prev.map((c) =>
             c.id === contactId
               ? {
-                  ...c,
-                  name: patch.name ? patch.name.trim() : c.name,
-                  phone:
-                    patch.phone !== undefined
-                      ? normalizePhone(patch.phone)
-                      : c.phone,
-                  email:
-                    patch.email !== undefined
-                      ? normalizeEmail(patch.email)
-                      : c.email,
-                }
+                ...c,
+                name: patch.name ? patch.name.trim() : c.name,
+                phone:
+                  patch.phone !== undefined
+                    ? normalizePhone(patch.phone)
+                    : c.phone,
+                email:
+                  patch.email !== undefined
+                    ? normalizeEmail(patch.email)
+                    : c.email,
+              }
               : c
           )
         );
