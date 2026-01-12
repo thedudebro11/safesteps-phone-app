@@ -23,6 +23,8 @@ type SharesContextValue = {
   endShare(shareId: string): Promise<void>;
   getActiveShareByContactId(contactId: string): ShareSession | undefined;
   getActiveShares(): ShareSession[];
+  endAllManualShares(): Promise<void>;
+  endAllLiveShares(): Promise<void>;
 };
 
 const SharesContext = createContext<SharesContextValue | null>(null);
@@ -78,6 +80,57 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
 
       activeShareToken,
       hasActiveShare: !!activeShareToken,
+
+      async endAllManualShares() {
+        let manualLive: ShareSession[] = [];
+
+        setShares((prev) => {
+          manualLive = prev.filter((s) => s.status === "live" && s.reason !== "emergency");
+          if (manualLive.length === 0) return prev;
+
+          const endedAt = new Date().toISOString();
+          return prev.map((s) =>
+            s.status === "live" && s.reason !== "emergency"
+              ? { ...s, status: "ended", endedAt }
+              : s
+          );
+        });
+
+        console.log("[Shares] endAllManualShares called", { count: manualLive.length });
+        if (manualLive.length === 0) return;
+
+        await Promise.all(
+          manualLive.map((s) => (s.token ? endShareToken(s.token) : Promise.resolve()))
+        );
+
+        console.log("[Shares] endAllManualShares ended", manualLive.map((s) => s.id));
+      },
+
+      async endAllLiveShares() {
+        let live: ShareSession[] = [];
+
+        setShares((prev) => {
+          live = prev.filter((s) => s.status === "live");
+          if (live.length === 0) return prev;
+
+          const endedAt = new Date().toISOString();
+          return prev.map((s) =>
+            s.status === "live" ? { ...s, status: "ended", endedAt } : s
+          );
+        });
+
+        console.log("[Shares] endAllLiveShares called", { count: live.length });
+        if (live.length === 0) return;
+
+        await Promise.all(
+          live.map((s) => (s.token ? endShareToken(s.token) : Promise.resolve()))
+        );
+
+        console.log("[Shares] endAllLiveShares ended", live.map((s) => s.id));
+      },
+
+
+
 
       async createShareForContact(
         contact: Contact,
@@ -164,7 +217,7 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
         return shares.filter((s) => s.status === "live");
       },
     };
-  }, [shares, isLoaded]);
+  }, [shares, isLoaded, isGuest]);
 
   return <SharesContext.Provider value={value}>{children}</SharesContext.Provider>;
 }

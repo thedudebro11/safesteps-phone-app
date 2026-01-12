@@ -182,3 +182,18 @@ Each history row supports:
   - encourage user to call emergency services (V1 copy later)
 
 ---
+## Tracking stop behavior and share cleanup
+
+### Invariant: Active Tracking shutdown ends shares
+When tracking is running in `mode="active"`, users may create live share sessions from Contacts.
+
+**Rule:** If tracking transitions from `"active"` → `"idle"`, the app must end any live share sessions so UI state does not remain in “SHARING” after tracking stops.
+
+### Implementation detail
+`TrackingProvider.stopAll()`:
+- Stops the interval
+- Sets mode to `"idle"`
+- If the previous mode was `"active"`, it calls `SharesProvider.endAllLiveShares()` to end live shares (local-first + best-effort server cleanup)
+
+Emergency mode remains separate:
+- Emergency can still end shares through the existing emergency/share sync logic when a share ends.

@@ -103,3 +103,6 @@ Format: Maintain **[Unreleased]**, cut releases when versions are tagged.
 ### Updated
 - Trusted Contacts limit now enforced centrally by ContactsProvider using tier rules.
   - Contacts screen relies on provider enforcement (prevents UI/logic mismatch).
+
+
+- Fix: stopping Active Tracking now ends live share sessions (prevents Contacts showing SHARING after tracking stops)

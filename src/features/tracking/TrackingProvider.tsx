@@ -75,6 +75,8 @@ async function getOneFix() {
 
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
   const { session, isGuest } = useAuth();
+  const { endAllLiveShares, activeShareToken } = useShares();
+
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isGuestRef = useRef(isGuest);
@@ -85,7 +87,6 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       intervalRef.current = null;
     }
   };
-  const { activeShareToken } = useShares();
   const activeShareTokenRef = useRef<string | null>(activeShareToken);
 
   useEffect(() => {
@@ -242,9 +243,17 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const stopAll = async () => {
+    const prevMode = mode; // capture before we change it
+    console.log("[Tracking] stopAll", { prevMode: mode });
     stopInterval();
     setMode("idle");
+
+    // If we were actively tracking, kill manual shares too
+    if (prevMode === "active") {
+      await endAllLiveShares();
+    }
   };
+
 
   const startActive = async () => {
     // If emergency is on, active tracking should not override it.
@@ -262,6 +271,9 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     if (mode !== "active") return;
     await stopAll();
   };
+
+
+
 
   const startEmergency = async () => {
     try {

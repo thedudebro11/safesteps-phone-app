@@ -20,3 +20,8 @@ Tracking states:
 
 ## Safety Principle
 The app never claims to share location unless location updates are actually running.
+
+## Rules / Invariants
+
+- Contacts “SHARING” UI is derived from share sessions (`status === "live"`).
+- Stopping Active Tracking must end any live shares so Contacts/Shares screens cannot remain “SHARING” while tracking is idle.

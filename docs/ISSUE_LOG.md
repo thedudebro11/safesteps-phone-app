@@ -234,3 +234,45 @@ When the `onPress` of the destructive Alert action didn’t run, the app silentl
 
 - Contacts screen should show a nicer, non-alert UX when contact limit reached
   - Example: disable “+ Add” and show inline banner with “Upgrade to add more contacts”
+
+
+## [2026-01-11] Guest: Stop Active Tracking did not stop Live Share
+
+### Symptom
+In guest mode:
+1) Start Active Tracking on Home
+2) Go to Contacts (share flow) and tap “Share Location Link”
+3) Go back Home and stop Active Tracking
+✅ Tracking stopped
+❌ Contacts still showed SHARING / share session remained live
+
+Emergency behaved correctly: stopping Emergency also stopped the share state everywhere.
+
+### Expected Behavior
+When Active Tracking is stopped, any live share sessions created for that tracking run should be ended so the UI and app state remain consistent.
+
+### Root Cause
+The “stop active tracking” path was stopping the tracking loop, but it was not reliably ending live share sessions.
+This created a state mismatch:
+- Tracking mode became idle
+- Shares stayed live
+- Contacts UI (derived from shares) continued to show SHARING
+
+### Fix
+1) Introduced a provider-level helper to end shares in bulk:
+- `endAllLiveShares()` in `SharesProvider`
+  - Marks all live shares as ended (local state)
+  - Best-effort notifies server (`/api/shares/end`) for each token
+
+2) Updated tracking shutdown behavior:
+- `TrackingProvider.stopAll()` now captures the previous mode before switching to idle.
+- If the previous mode was `"active"`, it calls `endAllLiveShares()` after stopping the interval.
+
+This makes Active Tracking → STOP behave like a single “session end” that also closes any live shares started during that session.
+
+### Invariant added
+If tracking transitions from `"active"` → `"idle"`, there must be no remaining `"live"` share sessions.
+
+### Files touched
+- `src/features/shares/SharesProvider.tsx`
+- `src/features/tracking/TrackingProvider.tsx`
