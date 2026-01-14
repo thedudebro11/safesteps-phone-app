@@ -11,6 +11,8 @@ import React, {
 import { Alert, Platform } from "react-native";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/src/lib/supabase"; // adjust path if needed
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 
 type AuthContextValue = {
   user: User | null;
@@ -36,6 +38,33 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const GUEST_FLAG_KEY = "safesteps_guest";
+
+async function readGuestFlag(): Promise<boolean> {
+  try {
+    if (Platform.OS === "web") {
+      return localStorage.getItem(GUEST_FLAG_KEY) === "1";
+    }
+    return (await AsyncStorage.getItem(GUEST_FLAG_KEY)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function writeGuestFlag(on: boolean): Promise<void> {
+  try {
+    if (Platform.OS === "web") {
+      if (on) localStorage.setItem(GUEST_FLAG_KEY, "1");
+      else localStorage.removeItem(GUEST_FLAG_KEY);
+      return;
+    }
+    if (on) await AsyncStorage.setItem(GUEST_FLAG_KEY, "1");
+    else await AsyncStorage.removeItem(GUEST_FLAG_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -45,6 +74,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthLoaded, setIsAuthLoaded] = useState<boolean>(false);
   const [isAuthActionLoading, setIsAuthActionLoading] =
     useState<boolean>(false);
+
+
+
 
   // --- Load initial Supabase session ---
   useEffect(() => {
@@ -67,14 +99,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
 
         // ✅ Restore guest on web refresh if no real session exists
-        const storedGuest =
-          Platform.OS === "web" && localStorage.getItem("safesteps_guest") === "1";
+        // ✅ Restore guest flag (web + native) if no real session exists
+        const storedGuest = await readGuestFlag();
 
         if (!session?.user && storedGuest) {
           setSession(null);
           setUser(null);
           setGuestMode(true);
         }
+
       } catch (err) {
         console.warn("[AuthProvider] unexpected getSession error:", err);
       } finally {
@@ -85,16 +118,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     loadSession();
 
-    const {
-      data: authListener,
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession ?? null);
       setUser(newSession?.user ?? null);
-      // If a real Supabase session appears, we should exit guest mode
+
+      // ✅ Only force guestMode off when a real user session exists.
+      // If session becomes null (SIGNED_OUT), do NOT turn guestMode off.
       if (newSession?.user) {
         setGuestMode(false);
+        void writeGuestFlag(false);
+        console.log("[AuthProvider] Supabase user session detected → disabling guestMode");
       }
+
     });
+
 
     return () => {
       isMounted = false;
@@ -106,20 +143,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
   const startGuestSession = useCallback(async () => {
-    // Kill any persisted Supabase session so it can’t “pop back in”
+    console.log("[AuthProvider] startGuestSession called");
+
+    // Set guest first so the UI/guard never sees "no session"
+    setGuestMode(true);
+    setSession(null);
+    setUser(null);
+    await writeGuestFlag(true);
+
     try {
       await supabase.auth.signOut();
     } catch (err) {
       console.warn("[AuthProvider] signOut during guest start failed:", err);
-    }
-
-    // Clear local state and enter guest mode
-    setSession(null);
-    setUser(null);
-    setGuestMode(true);
-
-    if (Platform.OS === "web") {
-      localStorage.setItem("safesteps_guest", "1");
     }
   }, []);
 
@@ -127,7 +162,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
 
+
   const endGuestSession = useCallback(async () => {
+    console.log("[AuthProvider] endGuestSession called");
+    await writeGuestFlag(false);
+
     setGuestMode(false);
 
     // ✅ Clear persisted guest flag (web)
@@ -200,6 +239,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     setIsAuthActionLoading(true);
+    console.log("[AuthProvider] signOut called");
+
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
@@ -209,12 +250,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setSession(null);
       setUser(null);
-      setGuestMode(false);
 
-      // ✅ Clear persisted guest flag (web)
-      if (Platform.OS === "web") {
-        localStorage.removeItem("safesteps_guest");
-      }
+      // ❌ Do NOT setGuestMode(false) here.
+      // Logging out should return to the login screen, but not interfere with
+      // the user's ability to start a guest session immediately after.
+
+      // ✅ Clear persisted guest flag only if you're explicitly leaving guest (handled in endGuestSession)
+      // so do nothing here.
     } catch (err) {
       console.warn("[AuthProvider] unexpected signOut error:", err);
       Alert.alert("Log out failed", "Unexpected error. Please try again.");
@@ -222,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAuthActionLoading(false);
     }
   }, []);
+
 
 
   const value: AuthContextValue = useMemo(() => {

@@ -5,7 +5,7 @@ import { createId } from "@/src/lib/ids";
 import type { ShareSession } from "./types";
 import type { Contact } from "@/src/features/contacts/types";
 import { useAuth } from "@/src/features/auth/AuthProvider";
-
+import { API_BASE_URL } from "@/src/lib/api";
 
 type SharesContextValue = {
   shares: ShareSession[];
@@ -31,7 +31,8 @@ const SharesContext = createContext<SharesContextValue | null>(null);
 
 const STORAGE_KEY = "safesteps.shares.v1";
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/+$/, "") ?? "";
+
+
 
 async function registerShareToken(token: string, reason: "manual" | "emergency") {
   if (!API_BASE_URL) return; // allow offline/dev without server
@@ -56,6 +57,18 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
   const [shares, setShares] = useState<ShareSession[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const { isGuest } = useAuth();
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    fetch(`${API_BASE_URL}/health`)
+      .then((r) => r.json())
+      .then((j) => console.log("[API] /health (shares)", j))
+      .catch((e) =>
+        console.warn("[API] /health failed (shares)", String(e))
+      );
+  }, []);
+
 
   useEffect(() => {
     (async () => {

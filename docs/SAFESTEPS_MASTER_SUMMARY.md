@@ -487,3 +487,35 @@ V1 is complete when:
 ---
 
 If you want, I can also generate a **diff-style “What changed vs your current master summary”** so you can update the other docs faster (DESIGN_GUIDE, SECURITY_MODEL, DB_SCHEMA, etc.) without missing anything.
+
+
+## Auth Modes (Supabase + Guest)
+
+SafeSteps supports two modes:
+
+### 1) Authenticated (Supabase)
+- `user` exists
+- `session` exists (access_token available)
+- `isAuthenticated = true`
+- `hasSession = true`
+
+### 2) Guest Mode (local-first)
+- No Supabase user
+- `guestMode = true`
+- `isGuest = guestMode && !user`
+- `hasSession = isGuest || isAuthenticated`
+- Guest state is persisted using a "guest flag" so guest survives reloads.
+
+### Key Rule
+**Never let Supabase SIGNED_OUT events automatically disable guest mode.**
+Supabase auth events can fire during transitions (especially when starting guest mode and calling `supabase.auth.signOut()`), so guest state must be treated as independent and higher-priority during guest start.
+
+### Guest Persistence
+Guest mode uses a shared key:
+- `GUEST_FLAG_KEY = "safesteps_guest"`
+- Web: `localStorage`
+- Native: `AsyncStorage`
+
+Guest is restored on app start if:
+- No Supabase user session exists AND guest flag is set.
+

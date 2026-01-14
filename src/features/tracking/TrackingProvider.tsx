@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
-import { Alert, Platform } from "react-native";
+import { Alert } from "react-native";
 import { useAuth } from "@/src/features/auth/AuthProvider";
 import { supabase } from "@/src/lib/supabase";
 import { useShares } from "@/src/features/shares/SharesProvider";
-
+import { API_BASE_URL } from "@/src/lib/api";
 
 
 type TrackingMode = "idle" | "active" | "emergency";
@@ -31,8 +31,7 @@ type TrackingActions = {
 
 const TrackingContext = createContext<(TrackingState & TrackingActions) | null>(null);
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/+$/, "") ?? "";
-console.log("API_BASE_URL:", process.env.EXPO_PUBLIC_API_BASE_URL);
+
 
 function nowMs() {
   return Date.now();
@@ -74,7 +73,7 @@ async function getOneFix() {
 }
 
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
-  const { session, isGuest } = useAuth();
+  const { session, isGuest, hasSession } = useAuth();
   const { endAllLiveShares, activeShareToken } = useShares();
 
 
@@ -92,6 +91,47 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     activeShareTokenRef.current = activeShareToken;
   }, [activeShareToken]);
+
+  useEffect(() => {
+    // If auth state says "no session at all", kill tracking immediately.
+    // (Prevents stray pings during transitions.)
+    if (!hasSession) {
+      stopInterval();
+      setMode("idle");
+    }
+  }, [hasSession]);
+
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    let cancelled = false;
+
+    fetch(`${API_BASE_URL}/health`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled) {
+          console.log("[API] /health", j, { baseUrl: API_BASE_URL });
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          console.warn("[API] /health failed", String(e), {
+            baseUrl: API_BASE_URL,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    console.log("API_BASE_URL:", API_BASE_URL);
+  }, []);
+
 
 
   useEffect(() => {
@@ -149,10 +189,10 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
 
     if (!API_BASE_URL) {
-      // eslint-disable-next-line no-console
-      console.warn("[Tracking] Missing EXPO_PUBLIC_API_BASE_URL — ping not sent.");
-      throw new Error("Missing EXPO_PUBLIC_API_BASE_URL");
+      console.warn("[Tracking] Missing API_BASE_URL — ping not sent.");
+      throw new Error("Missing API_BASE_URL");
     }
+
 
     const endpoint = payload.isEmergency ? "/api/emergency" : "/api/locations";
 
@@ -308,13 +348,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     return () => stopInterval();
   }, []);
 
-  // If user logs out / exits guest, stop tracking to avoid weird states.
-  useEffect(() => {
-    if (!session?.access_token && !isGuest) {
-      stopInterval();
-      setMode("idle");
-    }
-  }, [session?.access_token, isGuest]);
+ 
 
   const value = useMemo(
     () => ({

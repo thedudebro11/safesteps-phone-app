@@ -8,7 +8,7 @@ import { ContactsProvider } from "@/src/features/contacts/ContactsProvider";
 import { SharesProvider } from "@/src/features/shares/SharesProvider";
 
 function RootNavigator() {
-  const { isAuthLoaded, hasSession } = useAuth();
+  const { isAuthLoaded, hasSession, guestMode, isAuthenticated } = useAuth();
   const segments = useSegments();
 
   if (!isAuthLoaded) {
@@ -18,6 +18,15 @@ function RootNavigator() {
       </View>
     );
   }
+
+  const authSettling = guestMode || isAuthenticated;
+if (!hasSession && authSettling) {
+  return (
+    <View style={styles.splash}>
+      <ActivityIndicator />
+    </View>
+  );
+}
 
   const inAuthGroup = segments[0] === "(auth)";
 

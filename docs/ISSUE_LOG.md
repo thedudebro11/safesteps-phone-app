@@ -276,3 +276,49 @@ If tracking transitions from `"active"` → `"idle"`, there must be no remaining
 ### Files touched
 - `src/features/shares/SharesProvider.tsx`
 - `src/features/tracking/TrackingProvider.tsx`
+
+
+## Troubleshooting: Guest Mode "Flips Back to False" / Won't Enter App
+
+### Symptom
+After tapping "Continue as Guest":
+- Logs show `guestMode: true` briefly
+- Then `guestMode: false` + `hasSession: false`
+- User stays on login screen / navigation doesn't move
+
+### Root Cause
+Calling `supabase.auth.signOut()` during `startGuestSession()` triggers Supabase `onAuthStateChange(SIGNED_OUT, null)`.
+If the AuthProvider listener blindly sets `guestMode = false` whenever session changes, it overrides the guest transition.
+
+This creates a race:
+1) startGuestSession sets guestMode true
+2) SIGNED_OUT event sets guestMode false
+3) route guard sees `hasSession=false` → stays/redirects to login
+
+### Fix
+1) Make Supabase auth listener disable guest mode ONLY when a real user session exists:
+- If `newSession?.user` → setGuestMode(false) and clear guest flag
+- If `newSession` is null → do NOT change guestMode
+
+2) Persist guest mode across reloads (web + native):
+- `GUEST_FLAG_KEY = "safesteps_guest"`
+- Implement `readGuestFlag()` + `writeGuestFlag(on)`:
+  - web: localStorage
+  - native: AsyncStorage
+
+3) Restore guest mode on app start:
+- During initial `loadSession()`:
+  - if no Supabase user AND `storedGuest === true`:
+    - setSession(null)
+    - setUser(null)
+    - setGuestMode(true)
+
+### Debugging Checklist
+- Confirm `EXPO_PUBLIC_API_BASE_URL` resolves correctly on device (LAN IP, not localhost).
+- Confirm logs end with:
+  - `guestMode: true`
+  - `hasSession: true`
+  - `isGuest: true`
+- If guest flips off, search for any code calling:
+  - `endGuestSession()`
+  - `setGuestMode(false)` outside of “real user session detected”
