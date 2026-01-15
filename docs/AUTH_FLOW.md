@@ -298,3 +298,36 @@ Update this file when:
 
 This file is the **authoritative auth & navigation reference** for SafeSteps.
 
+## Auth & Navigation Invariant
+
+SafeSteps does NOT navigate manually after auth actions.
+
+Instead:
+
+- Screens mutate auth state only (signIn, signOut, startGuestSession, endGuestSession)
+- The root layout (`app/_layout.tsx`) is the single authority for redirects
+- Navigation is derived from `hasSession` and `isAuthLoaded`
+
+### Rules
+
+- Screens MUST NOT call `router.push`, `router.replace`, or `router.reset` after auth actions
+- Logout / guest exit only updates auth state
+- `_layout.tsx` decides whether to show `(auth)` or `(tabs)`
+
+This prevents:
+- Auth flapping
+- Unhandled navigator actions
+- Guest ↔ authed race conditions
+- Expo Router `(auth)` route errors
+
+
+## Guest Mode Exit
+
+Guest mode is a first-class session type.
+
+- `endGuestSession()` clears the persisted guest flag
+- No Supabase calls are required
+- After guest exit, `hasSession === false`
+- `_layout.tsx` automatically redirects to `/login`
+
+Settings screens must NOT navigate manually.

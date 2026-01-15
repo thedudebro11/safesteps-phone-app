@@ -7,7 +7,7 @@ import {
   SafeAreaView,
   Pressable,
 } from "react-native";
-import { router } from "expo-router";
+
 import { useAuth } from "@/src/features/auth/AuthProvider";
 
 const BG = "#050814";
@@ -18,22 +18,26 @@ const MUTED = "#a6b1cc";
 const DANGER = "#ff4b5c";
 
 export default function SettingsScreen() {
-  const { user, signOut, isAuthActionLoading, isGuest } = useAuth();
+  const { user, signOut, endGuestSession, isAuthActionLoading, isGuest } = useAuth();
 
   const handleLogout = async () => {
-    console.log("[Settings] Logout button pressed", {
-      isGuest,
-      isAuthActionLoading,
-    });
+    console.log("[Settings] Logout button pressed", { isGuest, isAuthActionLoading });
 
     try {
+      if (isGuest) {
+        await endGuestSession();
+        console.log("[Settings] endGuestSession() completed");
+        return; // _layout Redirect will take over
+      }
+
       await signOut();
-      console.log("[Settings] signOut() completed, navigating to /login");
-      
+      console.log("[Settings] signOut() completed");
+      return; // _layout Redirect will take over
     } catch (err) {
-      console.error("[Settings] Error during signOut:", err);
+      console.error("[Settings] Error during logout:", err);
     }
   };
+
 
   const primaryLabel = isGuest
     ? "Guest session (local only)"
@@ -78,8 +82,8 @@ export default function SettingsScreen() {
                 ? "Exiting…"
                 : "Logging out..."
               : isGuest
-              ? "Exit Guest Mode"
-              : "Log Out"}
+                ? "Exit Guest Mode"
+                : "Log Out"}
           </Text>
         </Pressable>
       </View>
