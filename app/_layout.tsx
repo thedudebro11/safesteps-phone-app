@@ -1,11 +1,14 @@
 // app/_layout.tsx
 import React from "react";
-import { ActivityIndicator, View, StyleSheet } from "react-native";
+import { ActivityIndicator, View, StyleSheet,Platform } from "react-native";
 import { Slot, useSegments, Redirect } from "expo-router";
 import { AuthProvider, useAuth } from "@/src/features/auth/AuthProvider";
 import { TrackingProvider } from "@/src/features/tracking/TrackingProvider";
 import { ContactsProvider } from "@/src/features/contacts/ContactsProvider";
 import { SharesProvider } from "@/src/features/shares/SharesProvider";
+
+
+
 
 function RootNavigator() {
   const { isAuthLoaded, hasSession, guestMode, isAuthenticated } = useAuth();

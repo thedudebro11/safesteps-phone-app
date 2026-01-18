@@ -6,13 +6,16 @@ import {
     Text,
     View,
     Pressable,
-    FlatList,
+    ScrollView,
+
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useShares } from "@/src/features/shares/SharesProvider";
 import { confirm } from "@/src/lib/confirm";
 import { useTracking } from "@/src/features/tracking/TrackingProvider";
 import { shouldStopEmergencyAfterEndingShare } from "@/src/features/shares/emergencySync";
+import LiveMapCard from "@/src/features/map/LiveMapCard";
+
 
 
 
@@ -36,7 +39,12 @@ export default function SharesScreen() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <View style={styles.container}>
+            <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={[styles.container, { flexGrow: 1 }]}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
                 <View style={styles.headerRow}>
                     <Text style={styles.title}>Shares</Text>
                     <Pressable
@@ -47,6 +55,9 @@ export default function SharesScreen() {
                     </Pressable>
                 </View>
 
+                <LiveMapCard title="Live Map" />
+
+
                 <View style={styles.card}>
                     <Text style={styles.cardTitle}>Active Shares</Text>
                     {active.length === 0 ? (
@@ -54,23 +65,14 @@ export default function SharesScreen() {
                             No active shares. Create one from Contacts or tap “New Share”.
                         </Text>
                     ) : (
-                        <FlatList
-                            data={active}
-                            keyExtractor={(item) => item.id}
-                            contentContainerStyle={{ gap: 12, paddingTop: 12 }}
-                            renderItem={({ item }) => (
-                                <View style={styles.row}>
+                        <View style={{ marginTop: 12, gap: 12 }}>
+                            {active.map((item) => (
+                                <View key={item.id} style={styles.row}>
                                     <View style={{ flex: 1, gap: 4 }}>
-                                        <Text style={styles.rowTitle}>
-                                            {item.contactSnapshot.name}
-                                        </Text>
+                                        <Text style={styles.rowTitle}>{item.contactSnapshot.name}</Text>
                                         <Text style={styles.rowMeta}>
-                                            {item.contactSnapshot.phone
-                                                ? item.contactSnapshot.phone
-                                                : "No phone"}
-                                            {item.contactSnapshot.email
-                                                ? ` • ${item.contactSnapshot.email}`
-                                                : ""}
+                                            {item.contactSnapshot.phone ? item.contactSnapshot.phone : "No phone"}
+                                            {item.contactSnapshot.email ? ` • ${item.contactSnapshot.email}` : ""}
                                         </Text>
                                         <Text style={styles.rowMeta}>
                                             Started: {new Date(item.startedAt).toLocaleString()}
@@ -86,9 +88,8 @@ export default function SharesScreen() {
                                                 "Cancel"
                                             );
                                             if (!ok) return;
-                                            // Decide BEFORE ending (state updates async)
-                                            const activeBefore = getActiveShares();
 
+                                            const activeBefore = getActiveShares();
                                             const willStopEmergency = shouldStopEmergencyAfterEndingShare({
                                                 mode,
                                                 endingShare: item,
@@ -98,19 +99,16 @@ export default function SharesScreen() {
                                             await endShare(item.id);
 
                                             if (willStopEmergency) stopEmergency();
-
-
                                         }}
                                         style={[styles.smallBtn, styles.smallBtnDanger]}
                                     >
                                         <Text style={styles.smallBtnDangerText}>End</Text>
                                     </Pressable>
-
-
                                 </View>
-                            )}
-                        />
+                            ))}
+                        </View>
                     )}
+
                 </View>
 
                 <View style={styles.card}>
@@ -124,14 +122,19 @@ export default function SharesScreen() {
                         </Text>
                     )}
                 </View>
-            </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: BG },
-    container: { flex: 1, padding: 20, gap: 16 },
+    container: {
+        padding: 20,
+        paddingBottom: 80,
+        gap: 16, // ✅ ADD THIS
+    },
+
     headerRow: {
         flexDirection: "row",
         alignItems: "center",

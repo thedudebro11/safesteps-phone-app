@@ -11,6 +11,14 @@ type TrackingMode = "idle" | "active" | "emergency";
 
 type TrackingFrequency = 30 | 60 | 300; // seconds: 30s, 1m, 5m (expand later)
 
+type LastFix = {
+  lat: number;
+  lng: number;
+  accuracyM: number | null;
+  timestampMs: number;
+};
+
+
 type TrackingState = {
   mode: TrackingMode;
   frequencySec: TrackingFrequency;
@@ -18,6 +26,8 @@ type TrackingState = {
   lastPingAt: number | null;
   lastError: string | null;
   hasForegroundPermission: boolean;
+  lastFix: LastFix | null;
+
 };
 
 type TrackingActions = {
@@ -151,6 +161,8 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   const [lastPingAt, setLastPingAt] = useState<number | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [hasForegroundPermission, setHasForegroundPermission] = useState<boolean>(false);
+  const [lastFix, setLastFix] = useState<LastFix | null>(null);
+
 
   const isRunning = mode !== "idle";
 
@@ -250,6 +262,13 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       await ensurePermission();
 
       const fix = await getOneFix();
+      setLastFix({
+        lat: fix.lat,
+        lng: fix.lng,
+        accuracyM: fix.accuracyM,
+        timestampMs: fix.timestampMs,
+      });
+
       const effectiveMode = modeOverride ?? mode;
       const isEmergency = effectiveMode === "emergency";
 
@@ -348,7 +367,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     return () => stopInterval();
   }, []);
 
- 
+
 
   const value = useMemo(
     () => ({
@@ -358,6 +377,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       lastPingAt,
       lastError,
       hasForegroundPermission,
+      lastFix,
       setFrequency,
       startActive,
       stopActive,
@@ -365,7 +385,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       stopEmergency,
       pingOnce,
     }),
-    [mode, frequencySec, isRunning, lastPingAt, lastError, hasForegroundPermission]
+    [mode, frequencySec, isRunning, lastPingAt, lastError, hasForegroundPermission,lastFix]
   );
 
   return <TrackingContext.Provider value={value}>{children}</TrackingContext.Provider>;

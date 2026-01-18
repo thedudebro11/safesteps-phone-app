@@ -1,0 +1,27 @@
+/* Minimal Leaflet styles for Expo Web (no local url(images/...) refs) */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #0c1020;
+  outline: none;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.leaflet-control-container {
+  display: none; /* V1: hide zoom/layer controls to avoid missing sprites */
+}

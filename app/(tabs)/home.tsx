@@ -1,6 +1,6 @@
 // app/(tabs)/home.tsx
 import React from "react";
-import { View, Text, StyleSheet, SafeAreaView, AppState, Pressable } from "react-native";
+import { View, Text, StyleSheet, SafeAreaView, AppState, Pressable,ScrollView  } from "react-native";
 import { useRouter } from "expo-router";
 
 import { useAuth } from "@/src/features/auth/AuthProvider";
@@ -11,6 +11,8 @@ import { useContacts } from "@/src/features/contacts/ContactsProvider";
 import { tryLocalNotify } from "@/src/lib/notify";
 import { EmergencyRecipientsModal } from "@/src/features/emergency/EmergencyRecipientsModal";
 import { getEmergencyRecipientLimit } from "@/src/lib/tiers";
+import LiveMapCard from "@/src/features/map/LiveMapCard";
+
 
 const BG = "#050814";
 const CARD_BG = "#0c1020";
@@ -148,7 +150,12 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.cardTitle}>Welcome</Text>
@@ -156,6 +163,9 @@ export default function HomeScreen() {
               <Text style={styles.badgeText}>{badgeText}</Text>
             </View>
           </View>
+
+          <LiveMapCard title="Live Map" />
+
 
           <Text style={styles.value}>{primaryLabel}</Text>
           <Text style={styles.bodyText}>{secondaryText}</Text>
@@ -292,7 +302,7 @@ export default function HomeScreen() {
         />
 
         <View style={styles.spacer} />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -350,7 +360,8 @@ const styles = StyleSheet.create({
   shareBtnText: { color: "#fff", fontSize: 14, fontWeight: "900" },
 
   safeArea: { flex: 1, backgroundColor: BG },
-  container: { flex: 1, padding: 20, gap: 16 },
+  container: { padding: 20, gap: 16, paddingBottom: 40 },
+
 
   card: {
     backgroundColor: CARD_BG,

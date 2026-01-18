@@ -5,7 +5,7 @@ import {
   Text,
   StyleSheet,
   SafeAreaView,
-  Pressable,
+  Pressable, ScrollView
 } from "react-native";
 
 import { useAuth } from "@/src/features/auth/AuthProvider";
@@ -49,7 +49,12 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.title}>Settings</Text>
 
         <View style={styles.card}>
@@ -86,8 +91,8 @@ export default function SettingsScreen() {
                 : "Log Out"}
           </Text>
         </Pressable>
-      </View>
-    </SafeAreaView>
+      </ScrollView>
+    </SafeAreaView >
   );
 }
 
@@ -97,9 +102,7 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
   container: {
-    flex: 1,
-    padding: 20,
-    gap: 16,
+    padding: 20, gap: 16, paddingBottom: 40
   },
   title: {
     color: "#fff",

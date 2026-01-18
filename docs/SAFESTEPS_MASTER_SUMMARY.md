@@ -519,3 +519,69 @@ Guest mode uses a shared key:
 Guest is restored on app start if:
 - No Supabase user session exists AND guest flag is set.
 
+UI + Tracking Synchronization Update (Live Map & Scrolling Fix)
+
+Summary
+Added a shared “Live Map” component across Home and Shares, exposed lastFix from TrackingProvider, and fixed mobile scrolling issues caused by native map gesture interception.
+
+Key changes
+
+Introduced src/features/map/:
+
+SharedMap.native.tsx (react-native-maps)
+
+SharedMap.web.tsx (react-leaflet + OSM)
+
+LiveMapCard.tsx (shared card UI)
+
+Map displays last known device location, not recipient locations (by design for V1).
+
+Share state (“Sharing with…”, emergency badge) is derived from client state only.
+
+TrackingProvider
+
+Added lastFix to tracking state.
+
+lastFix updates on every GPS fix even if network ping fails.
+
+Ensures UI (map, accuracy) remains truthful during offline / network errors.
+
+Tracking → idle transition enforces invariant:
+
+active → idle ⇒ zero live shares.
+
+Scrolling fix (critical mobile behavior)
+
+Native maps intercept touch gestures and break ScrollView scrolling.
+
+Solution:
+
+Disable map interaction entirely for V1.
+
+Apply pointerEvents="none" on the map wrapper.
+
+Explicitly disable map gestures (scrollEnabled, zoomEnabled, etc.).
+
+Result:
+
+Scroll works reliably on Home, Shares, and future screens.
+
+Map is display-only (correct for V1).
+
+Layout consistency
+
+All tab screens now use a single scroll container (ScrollView).
+
+Spacing standardized using gap on container styles.
+
+Shares screen spacing now matches Home screen card rhythm.
+
+Why this matters
+
+Prevents UI drift between tabs.
+
+Keeps tracking + sharing logic authoritative in the client.
+
+Avoids gesture bugs that only appear on real devices.
+
+Sets a stable foundation for future multi-recipient map views.
