@@ -83,8 +83,16 @@ async function getOneFix() {
 }
 
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
-  const { session, isGuest, hasSession } = useAuth();
-  const { endAllLiveShares, activeShareToken } = useShares();
+  const { isGuest, hasSession } = useAuth();
+  const {
+    endAllLiveShares,
+    getActiveShares,
+    isLoaded: sharesLoaded,
+    activeShareToken,
+  } = useShares();
+
+
+
 
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -97,6 +105,8 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     }
   };
   const activeShareTokenRef = useRef<string | null>(activeShareToken);
+  const bootReconciledRef = useRef(false);
+
 
   useEffect(() => {
     activeShareTokenRef.current = activeShareToken;
@@ -156,12 +166,32 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
 
 
+
+
+
   const [mode, setMode] = useState<TrackingMode>("idle");
   const [frequencySec, setFrequencySec] = useState<TrackingFrequency>(60);
   const [lastPingAt, setLastPingAt] = useState<number | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [hasForegroundPermission, setHasForegroundPermission] = useState<boolean>(false);
   const [lastFix, setLastFix] = useState<LastFix | null>(null);
+
+  useEffect(() => {
+    if (!sharesLoaded) return;
+    if (bootReconciledRef.current) return;
+
+    bootReconciledRef.current = true;
+
+    if (mode === "idle") {
+      const active = getActiveShares();
+      if (active.length > 0) {
+        console.log("[Boot] Ending stale live shares after restart", {
+          count: active.length,
+        });
+        void endAllLiveShares();
+      }
+    }
+  }, [sharesLoaded, mode, getActiveShares, endAllLiveShares]);
 
 
   const isRunning = mode !== "idle";
@@ -303,7 +333,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
   const stopAll = async () => {
     const prevMode = mode; // capture before we change it
-    console.log("[Tracking] stopAll", { prevMode: mode });
+    console.log("[Tracking] stopAll", { prevMode });
     stopInterval();
     setMode("idle");
 
@@ -385,7 +415,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       stopEmergency,
       pingOnce,
     }),
-    [mode, frequencySec, isRunning, lastPingAt, lastError, hasForegroundPermission,lastFix]
+    [mode, frequencySec, isRunning, lastPingAt, lastError, hasForegroundPermission, lastFix]
   );
 
   return <TrackingContext.Provider value={value}>{children}</TrackingContext.Provider>;

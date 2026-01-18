@@ -322,3 +322,69 @@ This creates a race:
 - If guest flips off, search for any code calling:
   - `endGuestSession()`
   - `setGuestMode(false)` outside of “real user session detected”
+
+Bug: stale “live shares” after app restart (mobile only)
+
+On Expo Go (Android), restarting Metro and rescanning the QR code caused:
+
+Shares to rehydrate from AsyncStorage as status === "live"
+
+Tracking state to reset to "idle" (fresh JS runtime)
+
+Result:
+
+Contacts screen showed “SHARING”
+
+Shares screen showed active shares
+
+Home screen showed tracking OFF
+
+This created a state inconsistency where sharing appeared active without tracking running.
+
+Root cause
+
+SharesProvider persists state via AsyncStorage and rehydrates on app boot
+
+TrackingProvider does not persist tracking mode (by design)
+
+On cold boot:
+
+Shares hydrate first
+
+Tracking initializes to "idle"
+
+Mobile (Expo Go) reliably exposes this because AsyncStorage survives Metro restarts, while JS state does not.
+
+Fix: boot-time reconciliation
+
+A one-time reconciliation runs after shares hydrate:
+
+If shares are loaded
+
+And tracking mode is "idle"
+
+And any shares are still marked "live"
+
+→ All live shares are immediately ended.
+
+Then describe where it lives:
+
+Implementation details
+
+SharesProvider
+
+Hydration is guarded with hydratedOnceRef to prevent double execution
+
+TrackingProvider
+
+A bootReconciledRef ensures reconciliation runs once per boot
+
+Effect depends on:
+
+sharesLoaded
+
+mode
+
+getActiveShares
+
+This guarantees deterministic behavior across restarts.

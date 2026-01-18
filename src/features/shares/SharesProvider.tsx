@@ -1,11 +1,12 @@
 // src/features/shares/SharesProvider.tsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { readJson, writeJson } from "@/src/lib/storage";
 import { createId } from "@/src/lib/ids";
 import type { ShareSession } from "./types";
 import type { Contact } from "@/src/features/contacts/types";
 import { useAuth } from "@/src/features/auth/AuthProvider";
 import { API_BASE_URL } from "@/src/lib/api";
+
 
 type SharesContextValue = {
   shares: ShareSession[];
@@ -34,6 +35,7 @@ const STORAGE_KEY = "safesteps.shares.v1";
 
 
 
+
 async function registerShareToken(token: string, reason: "manual" | "emergency") {
   if (!API_BASE_URL) return; // allow offline/dev without server
   await fetch(`${API_BASE_URL}/api/shares/start`, {
@@ -57,6 +59,8 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
   const [shares, setShares] = useState<ShareSession[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const { isGuest } = useAuth();
+  const hydratedOnceRef = useRef(false);
+
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -71,12 +75,20 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
 
 
   useEffect(() => {
+    if (hydratedOnceRef.current) return;
+    hydratedOnceRef.current = true;
+
     (async () => {
       const saved = await readJson<ShareSession[]>(STORAGE_KEY, []);
-      setShares(Array.isArray(saved) ? saved : []);
+      const loaded = Array.isArray(saved) ? saved : [];
+      setShares(loaded);
       setIsLoaded(true);
+
+      console.log("[Shares] hydrated", { count: loaded.length });
     })();
   }, []);
+
+
 
   useEffect(() => {
     if (!isLoaded) return;

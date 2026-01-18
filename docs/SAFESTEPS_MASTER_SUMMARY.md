@@ -585,3 +585,21 @@ Keeps tracking + sharing logic authoritative in the client.
 Avoids gesture bugs that only appear on real devices.
 
 Sets a stable foundation for future multi-recipient map views.
+
+Design invariant (V1)
+
+SafeSteps must never resume tracking automatically after a restart.
+
+Therefore:
+
+Live shares cannot survive a cold boot if tracking is idle
+
+Ending stale shares is preferred over silently restarting tracking
+
+This preserves:
+
+User consent
+
+Truthful UI
+
+Privacy-first behavior
