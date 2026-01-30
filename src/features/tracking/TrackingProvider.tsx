@@ -7,9 +7,11 @@ import { useShares } from "@/src/features/shares/SharesProvider";
 import { API_BASE_URL } from "@/src/lib/api";
 
 
+
 type TrackingMode = "idle" | "active" | "emergency";
 
-type TrackingFrequency = 30 | 60 | 300; // seconds: 30s, 1m, 5m (expand later)
+export type TrackingFrequency = 30 | 60 | 300;
+ // seconds: 30s, 1m, 5m (expand later)
 
 type LastFix = {
   lat: number;

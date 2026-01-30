@@ -603,3 +603,52 @@ User consent
 Truthful UI
 
 Privacy-first behavior
+
+
+## Home UI (Map-first + Bottom Action Drawer)
+
+### Overview
+The Home experience is now **map-first**. The map is the base layer, and the primary controls live in a bottom sheet component ("BottomActionDrawer") that overlays the map.
+
+### Entry point
+Home route:
+- `app/(tabs)/home.tsx` → renders the feature home screen
+- `app/(tabs)/home.web.tsx` → web-specific version (if present)
+
+Home feature screen:
+- `src/features/home/MapFirstHomeScreen.native.tsx` (native)
+  - Renders the map base layer
+  - Renders top overlay controls (settings/title/notifications)
+  - Renders `<BottomActionDrawer />` on top of the map
+
+### BottomActionDrawer
+Location:
+- `src/features/home/components/BottomActionDrawer.tsx`
+
+Purpose:
+- Provides the main Home actions (Active Tracking, Emergency, Share)
+- Expands/collapses via a grab handle (UX goal: Life360-style drag interaction)
+- Should sit flush with the bottom tab bar (no map visible underneath when expanded)
+
+Tracking integration:
+- Drawer reads from `useTracking()`:
+  - `mode` (idle/active/emergency)
+  - `frequencySec`
+  - `setFrequency(next)` (typed as TrackingFrequency)
+  - `startActive()`, `startEmergency()`
+
+### DiscreteFrequencySlider
+Location:
+- `src/features/home/components/DiscreteFrequencySlider.tsx`
+
+Behavior:
+- Discrete stop-based selection (no smooth continuous slider)
+- Uses track measurement + press mapping to select the nearest stop
+
+Typing / invariants:
+- Slider stop values must match `TrackingFrequency` union
+- If a stop is not in the union (e.g. 900), TS will reject it until the union + logic support it
+
+### Navigation additions
+- `/(tabs)/membership` route exists (placeholder or active)
+- `babel.config.js` and `tsconfig.json` may include aliasing config used across the app

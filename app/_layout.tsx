@@ -1,14 +1,15 @@
 // app/_layout.tsx
+import "react-native-gesture-handler";
+
 import React from "react";
-import { ActivityIndicator, View, StyleSheet,Platform } from "react-native";
+import { ActivityIndicator, View, StyleSheet } from "react-native";
 import { Slot, useSegments, Redirect } from "expo-router";
 import { AuthProvider, useAuth } from "@/src/features/auth/AuthProvider";
 import { TrackingProvider } from "@/src/features/tracking/TrackingProvider";
 import { ContactsProvider } from "@/src/features/contacts/ContactsProvider";
 import { SharesProvider } from "@/src/features/shares/SharesProvider";
-
-
-
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 function RootNavigator() {
   const { isAuthLoaded, hasSession, guestMode, isAuthenticated } = useAuth();
@@ -23,26 +24,22 @@ function RootNavigator() {
   }
 
   const authSettling = guestMode || isAuthenticated;
-if (!hasSession && authSettling) {
-  return (
-    <View style={styles.splash}>
-      <ActivityIndicator />
-    </View>
-  );
-}
+  if (!hasSession && authSettling) {
+    return (
+      <View style={styles.splash}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
 
   const inAuthGroup = segments[0] === "(auth)";
 
-  // Not logged in (no guest + no user) → force /login
   if (!hasSession && !inAuthGroup) {
     return <Redirect href="/(auth)/login" />;
-
   }
 
-  // Logged in but currently on auth screens → send to tabs/home
   if (hasSession && inAuthGroup) {
     return <Redirect href="/(tabs)/home" />;
-
   }
 
   return <Slot />;
@@ -50,15 +47,19 @@ if (!hasSession && authSettling) {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <ContactsProvider>
-        <SharesProvider>
-          <TrackingProvider>
-            <RootNavigator />
-          </TrackingProvider>
-        </SharesProvider>
-      </ContactsProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <ContactsProvider>
+            <SharesProvider>
+              <TrackingProvider>
+                <RootNavigator />
+              </TrackingProvider>
+            </SharesProvider>
+          </ContactsProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
