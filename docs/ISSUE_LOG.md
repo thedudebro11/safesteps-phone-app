@@ -388,3 +388,124 @@ mode
 getActiveShares
 
 This guarantees deterministic behavior across restarts.
+
+Home Screen — Map-first UI + Bottom Action Drawer
+
+Goal: Make the Home screen feel “Life360-style”: map as the base layer, with a draggable bottom sheet that overlays the map and provides tracking controls without duplicating tab navigation.
+
+Files touched
+
+src/features/home/MapFirstHomeScreen.native.tsx
+
+src/features/home/components/BottomActionDrawer.tsx
+
+MapFirstHomeScreen.native.tsx
+
+What it does
+
+Renders the map as the base layer
+
+Renders top overlay controls (settings, title pill, notifications)
+
+Renders <BottomActionDrawer tabBarHeight={useBottomTabBarHeight()} />
+
+Why
+
+Keeps the map always visible behind UI overlays
+
+Passes real tab bar height to ensure the drawer sits flush with the bottom tabs and doesn’t reveal map underneath the tab bar area
+
+BottomActionDrawer.tsx — final behavior + how we achieved it
+Desired behavior (target UX)
+
+Drawer starts in a collapsed “peek” state
+
+User can drag up/down smoothly
+
+Drawer should expand exactly as far as the user drags
+
+When user releases, the drawer should stay where it was released (no snapping)
+
+Drawer must never expand beyond its intended bounds such that:
+
+the user sees the bottom of the drawer
+
+or sees the map peeking through at the bottom
+
+Problem we hit
+
+Early versions behaved like a traditional 2-snap sheet:
+
+If dragged enough, it snapped fully open
+
+Otherwise it snapped back down
+
+Spring animations could overshoot and reveal bottom drawer space / map underneath
+
+PanResponder on the entire sheet also risked fighting with slider interactions
+
+Final solution
+
+We implemented a free-drag (non-snapping) bottom drawer with strict clamping:
+
+Clamp movement within bounds
+
+We compute two limits:
+
+MIN_TRANSLATE_Y = 0 (fully expanded)
+
+MAX_TRANSLATE_Y = MAX_VISUAL_HEIGHT - PEEK_HEIGHT (collapsed peek)
+
+During dragging, we clamp translateY:
+
+prevents overscroll
+
+prevents revealing the map at the bottom
+
+No snapping on release
+
+Removed midpoint snap logic entirely
+
+On release, we keep the current value:
+
+const inertial = value;
+
+Result: drawer remains exactly where the user drops it
+
+No gesture conflicts with slider/buttons
+
+PanResponder handlers are attached only to the handle zone
+
+This makes the slider/buttons responsive and avoids accidental drags while interacting with controls
+
+Deterministic start state
+
+Drawer always starts collapsed by setting:
+
+translateY.setValue(MAX_TRANSLATE_Y)
+
+lastTranslateY.current = MAX_TRANSLATE_Y
+
+Fixes retained Animated.Value issues during hot reload
+
+Key implementation notes
+
+MAX_VISUAL_HEIGHT is capped to avoid collision with top overlay controls
+
+PEEK_HEIGHT controls how much of the drawer is visible when collapsed
+
+translateY is the single source of truth for drawer position:
+
+0 = expanded
+
+MAX_TRANSLATE_Y = collapsed
+
+UX additions
+
+“Ping frequency” label + a right-aligned pill showing the current selected interval (e.g. 5 min ping)
+
+Battery meaning row with icons:
+
+Less battery (left)
+
+More battery (right)

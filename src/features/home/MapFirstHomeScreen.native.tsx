@@ -2,15 +2,15 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { BottomActionDrawer } from "@/src/features/home/components/BottomActionDrawer";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import  BottomActionDrawer  from "@/src/features/home/components/BottomActionDrawer";
 
 export default function MapFirstHomeScreen() {
   const insets = useSafeAreaInsets();
 
   // Your tab bar is roughly ~64px; keep it slightly generous so the drawer
   // never fights the bottom tabs.
-  const tabBarHeight = 64 + insets.bottom;
+  const tabBarHeight = useBottomTabBarHeight();
 
   return (
     <View style={styles.root}>

@@ -1,359 +1,435 @@
-import React, { useMemo, useRef, useState } from "react";
+// src/features/home/components/BottomActionDrawer.tsx
+import React, { useEffect, useMemo, useRef } from "react";
 import {
-    Animated,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
-    type ViewStyle,
-    type TextStyle,
+  Animated,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  Alert,
+  useWindowDimensions,
 } from "react-native";
-import { router } from "expo-router";
-import type {
-    PressableStateCallbackType,
-    StyleProp
-} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useTracking } from "@/src/features/tracking/TrackingProvider";
 import DiscreteFrequencySlider from "@/src/features/home/components/DiscreteFrequencySlider";
+import { useTracking, type TrackingFrequency } from "@/src/features/tracking/TrackingProvider";
 
-const CARD_BG = "rgba(255,255,255,0.96)";
-const BORDER = "rgba(0,0,0,0.08)";
-const TXT = "rgba(0,0,0,0.90)";
-const SUB = "rgba(0,0,0,0.55)";
-
-const BLUE = "#2F6FED";
-const PURPLE = "#7B61FF";
-const RED = "#FF4D5A";
-
-type Tone = "neutral" | "primary" | "danger" | "accent";
-
-function SoftButton({
-    label,
-    tone = "neutral",
-    onPress,
-    style,
-}: {
-    label: string;
-    tone?: Tone;
-    onPress: () => void;
-    style?: StyleProp<ViewStyle>;
-}) {
-    const palette = useMemo(() => {
-        if (tone === "primary")
-            return { bg: "rgba(47,111,237,0.16)", border: "rgba(47,111,237,0.55)", text: BLUE };
-        if (tone === "danger")
-            return { bg: "rgba(255,77,90,0.16)", border: "rgba(255,77,90,0.65)", text: RED };
-        if (tone === "accent")
-            return { bg: "rgba(123,97,255,0.16)", border: "rgba(123,97,255,0.55)", text: PURPLE };
-        return { bg: "rgba(0,0,0,0.04)", border: "rgba(0,0,0,0.10)", text: TXT };
-    }, [tone]);
-
-    const pressableStyle = ({ pressed }: PressableStateCallbackType): StyleProp<ViewStyle> => [
-        styles.softBtn,
-        style,
-        {
-            backgroundColor: palette.bg,
-            borderColor: palette.border,
-            opacity: pressed ? 0.9 : 1,
-        },
-    ];
-
-    const textStyle: TextStyle = {
-        ...styles.softBtnText,
-        color: palette.text,
-    };
-
-    return (
-        <Pressable onPress={onPress} style={pressableStyle}>
-            <Text style={[styles.softBtnText, { color: palette.text }]}>{label}</Text>
-        </Pressable>
-    );
-}
-
-function MiniNavItem({
-    icon,
-    label,
-    onPress,
-    active,
-}: {
-    icon: string;
-    label: string;
-    onPress: () => void;
-    active?: boolean;
-}) {
-    const pressableStyle = ({ pressed }: PressableStateCallbackType): StyleProp<ViewStyle> => [
-        styles.miniNavItem,
-        { opacity: pressed ? 0.85 : 1 },
-    ];
-
-    return (
-        <Pressable onPress={onPress} style={pressableStyle}>
-            <Text style={[styles.miniNavIcon, { color: active ? PURPLE : "rgba(0,0,0,0.65)" }]}>{icon}</Text>
-            <Text style={[styles.miniNavLabel, { color: active ? PURPLE : "rgba(0,0,0,0.55)" }]}>{label}</Text>
-        </Pressable>
-    );
-}
-
-export function BottomActionDrawer({ tabBarHeight }: { tabBarHeight: number }) {
-    const { mode, frequencySec, setFrequency, startActive, startEmergency } = useTracking();
-
-    const [expanded, setExpanded] = useState(false);
-    const anim = useRef(new Animated.Value(0)).current;
-
-    const collapsedHeight = 112;
-    const expandedHeight = 430;
-
-    const height = anim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [collapsedHeight, expandedHeight],
-    });
-
-    const toggle = () => {
-        const next = !expanded;
-        setExpanded(next);
-        Animated.timing(anim, {
-            toValue: next ? 1 : 0,
-            duration: 220,
-            useNativeDriver: false,
-        }).start();
-    };
-
-    const thumbPadStyle: ViewStyle = { paddingBottom: tabBarHeight + 10 };
-    const STOPS = [30, 60, 300] as const;
-
-
-    return (
-        <Animated.View style={[styles.sheet, thumbPadStyle, { height }]}>
-            <Pressable onPress={toggle} style={styles.grabberHit}>
-                <View style={styles.grabber} />
-            </Pressable>
-
-            {!expanded ? (
-                <View style={styles.collapsed}>
-                    <View style={styles.quickRow}>
-                        <SoftButton
-                            label="CONTACTS"
-                            tone="neutral"
-                            onPress={() => router.push("/(tabs)/contacts")}
-                            style={styles.quickBtn}
-                        />
-                        <SoftButton
-                            label="SHARES"
-                            tone="accent"
-                            onPress={() => router.push("/(tabs)/shares")}
-                            style={styles.quickBtn}
-                        />
-                        <SoftButton
-                            label="MEMBERSHIP"
-                            tone="neutral"
-                            onPress={() => router.push("/(tabs)/membership")}
-                            style={styles.quickBtn}
-                        />
-                    </View>
-
-                    <Text style={styles.hint}>Tap the handle to expand controls</Text>
-                </View>
-            ) : (
-                <View style={styles.expanded}>
-                    <View style={styles.row}>
-                        <SoftButton label={"Start Active\nTracking"} tone="primary" onPress={startActive} style={styles.bigAction} />
-                        <SoftButton label="EMERGENCY" tone="danger" onPress={startEmergency} style={styles.bigAction} />
-                        <SoftButton label="Share" tone="accent" onPress={() => router.push("/(tabs)/shares")} style={styles.bigAction} />
-                    </View>
-
-                    <View style={styles.row}>
-                        <SoftButton label="Share" tone="accent" onPress={() => router.push("/(tabs)/shares")} style={styles.smallAction} />
-                        <SoftButton label="Invite" tone="neutral" onPress={() => router.push("/(tabs)/contacts")} style={styles.smallAction} />
-                    </View>
-
-                    <DiscreteFrequencySlider
-                        valueSec={frequencySec}
-                        stopsSec={STOPS}
-                        onChange={setFrequency}
-                    />
-
-
-
-                    <View style={styles.status}>
-                        <Text style={styles.statusTitle}>
-                            {mode === "emergency" ? "Emergency" : mode === "active" ? "Active" : "Idle"}
-                        </Text>
-                        <Text style={styles.statusSub}>
-                            Last ping interval{" "}
-                            <Text style={{ color: TXT, fontWeight: "900" }}>
-                                {frequencySec >= 60 ? `${Math.round(frequencySec / 60)} min` : `${frequencySec} sec`}
-                            </Text>
-                        </Text>
-                    </View>
-
-                    <View style={styles.bottomNav}>
-                        <MiniNavItem icon="👥" label="Contacts" onPress={() => router.push("/(tabs)/contacts")} />
-                        <MiniNavItem icon="🧬" label="Shares" onPress={() => router.push("/(tabs)/shares")} active />
-                        <MiniNavItem icon="⭐" label="Membership" onPress={() => router.push("/(tabs)/membership")} />
-                    </View>
-                </View>
-            )}
-        </Animated.View>
-    );
-}
-
-type Styles = {
-    sheet: ViewStyle;
-    grabberHit: ViewStyle;
-    grabber: ViewStyle;
-
-    collapsed: ViewStyle;
-    quickRow: ViewStyle;
-    quickBtn: ViewStyle;
-    hint: TextStyle;
-
-    expanded: ViewStyle;
-    row: ViewStyle;
-
-    bigAction: ViewStyle;
-    smallAction: ViewStyle;
-
-    softBtn: ViewStyle;
-    softBtnText: TextStyle;
-
-    status: ViewStyle;
-    statusTitle: TextStyle;
-    statusSub: TextStyle;
-
-    bottomNav: ViewStyle;
-    miniNavItem: ViewStyle;
-    miniNavIcon: TextStyle;
-    miniNavLabel: TextStyle;
+type Props = {
+  tabBarHeight: number;
 };
 
-const styles = StyleSheet.create<Styles>({
-    sheet: {
-        position: "absolute",
-        left: 14,
-        right: 14,
-        bottom: 12,
-        borderRadius: 28,
-        backgroundColor: CARD_BG,
-        borderWidth: 1,
-        borderColor: BORDER,
-        overflow: "hidden",
-        shadowColor: "#000",
-        shadowOpacity: 0.14,
-        shadowRadius: 18,
-        shadowOffset: { width: 0, height: 10 },
-        elevation: 10,
-    },
+export default function BottomActionDrawer({ tabBarHeight }: Props) {
+  const insets = useSafeAreaInsets();
+  const { height: screenH } = useWindowDimensions();
 
-    grabberHit: {
-        paddingTop: 10,
-        paddingBottom: 10,
-        alignItems: "center",
-    },
-    grabber: {
-        width: 62,
-        height: 6,
-        borderRadius: 999,
-        backgroundColor: "rgba(0,0,0,0.18)",
-    },
+  const {
+    mode,
+    frequencySec,
+    setFrequency,
+    startActive,
+    stopActive,
+    startEmergency,
+    stopEmergency,
+  } = useTracking();
 
-    collapsed: {
-        paddingHorizontal: 14,
-        paddingBottom: 10,
-        rowGap: 10,
-    },
+  const isEmergency = mode === "emergency";
+  const isActive = mode === "active";
 
-    quickRow: {
-        flexDirection: "row",
-        columnGap: 10,
-        justifyContent: "space-between",
-    },
-    quickBtn: { flex: 1 },
+  /**
+   * Keep STOPS a strict subset of TrackingFrequency union.
+   * (900 not included unless it's in your union.)
+   */
+  const STOPS = useMemo(
+    () => [30, 60, 300] as const satisfies readonly TrackingFrequency[],
+    []
+  );
 
-    hint: {
-        textAlign: "center",
-        color: SUB,
-        fontSize: 12,
-        fontWeight: "900",
-    },
+  /**
+   * Drawer sizing:
+   * - MAX_VISUAL_HEIGHT: full expanded drawer height
+   * - PEEK_HEIGHT: amount visible when collapsed
+   *
+   * IMPORTANT: This drawer is now "free-drag" (no snapping).
+   * It will stay where you release it, but it is clamped within bounds.
+   */
+  const PEEK_HEIGHT = 140; // tweak: 110–170 depending on your taste
 
-    expanded: {
-        paddingHorizontal: 14,
-        paddingBottom: 14,
-        rowGap: 12,
-    },
+  const MAX_VISUAL_HEIGHT = Math.min(
+    560,
+    screenH - (insets.top + 80) - tabBarHeight
+  );
 
-    row: {
-        flexDirection: "row",
-        columnGap: 10,
-        justifyContent: "space-between",
-    },
+  // translateY bounds
+  const MIN_TRANSLATE_Y = 0; // fully expanded
+  const MAX_TRANSLATE_Y = clamp(
+    MAX_VISUAL_HEIGHT - PEEK_HEIGHT,
+    0,
+    MAX_VISUAL_HEIGHT
+  ); // fully collapsed
 
-    bigAction: {
-        flex: 1,
-        minHeight: 54,
-        borderRadius: 16,
-        paddingHorizontal: 10,
-        justifyContent: "center",
-    },
+  // translateY: 0 = expanded, MAX_TRANSLATE_Y = collapsed
+  const translateY = useRef(new Animated.Value(MAX_TRANSLATE_Y)).current;
+  const lastTranslateY = useRef(MAX_TRANSLATE_Y);
 
-    smallAction: {
-        flex: 1,
-        minHeight: 46,
-        borderRadius: 16,
-    },
+  // Always start collapsed (beats fast refresh/retained refs)
+  useEffect(() => {
+    translateY.setValue(MAX_TRANSLATE_Y);
+    lastTranslateY.current = MAX_TRANSLATE_Y;
+  }, [translateY, MAX_TRANSLATE_Y]);
 
-    softBtn: {
-        minHeight: 44,
-        borderRadius: 16,
-        borderWidth: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: 10,
-    },
-    softBtnText: {
-        fontSize: 12,
-        fontWeight: "900",
-        letterSpacing: 0.3,
-        textTransform: "uppercase",
-        textAlign: "center",
-    },
+  // Only used if we need to correct out-of-bounds values (no snapping)
+  const settleWithinBounds = (value: number) => {
+    const clamped = clamp(value, MIN_TRANSLATE_Y, MAX_TRANSLATE_Y);
+    lastTranslateY.current = clamped;
 
-    status: {
-        alignItems: "center",
-        rowGap: 4,
-        paddingTop: 2,
-    },
-    statusTitle: {
-        fontSize: 16,
-        fontWeight: "900",
-        color: TXT,
-    },
-    statusSub: {
-        fontSize: 13,
-        fontWeight: "800",
-        color: SUB,
-    },
+    Animated.timing(translateY, {
+      toValue: clamped,
+      duration: 120,
+      useNativeDriver: true,
+    }).start();
+  };
 
-    bottomNav: {
-        marginTop: 2,
-        borderTopWidth: 1,
-        borderTopColor: "rgba(0,0,0,0.08)",
-        paddingTop: 10,
-        flexDirection: "row",
-        justifyContent: "space-around",
-    },
-    miniNavItem: {
-        alignItems: "center",
-        rowGap: 2,
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-    },
-    miniNavIcon: {
-        fontSize: 18,
-    },
-    miniNavLabel: {
-        fontSize: 12,
-        fontWeight: "900",
-    },
+  const panResponder = useMemo(() => {
+    return PanResponder.create({
+      // We only attach handlers to the handle zone; still guard intent
+      onMoveShouldSetPanResponder: (_, gesture) => {
+        const dy = Math.abs(gesture.dy);
+        const dx = Math.abs(gesture.dx);
+        return dy > 4 && dy > dx;
+      },
+
+      onPanResponderGrant: () => {
+        translateY.stopAnimation((value: number) => {
+          lastTranslateY.current = value;
+        });
+      },
+
+      onPanResponderMove: (_, gesture) => {
+        const next = clamp(
+          lastTranslateY.current + gesture.dy,
+          MIN_TRANSLATE_Y,
+          MAX_TRANSLATE_Y
+        );
+        translateY.setValue(next);
+      },
+
+      onPanResponderRelease: (_, gesture) => {
+        // FREE-DRAG behavior:
+        // Do NOT snap. Just keep the current position.
+        // Only correct if out-of-bounds (or if a very fast fling would push it there).
+        translateY.stopAnimation((value: number) => {
+          // If user flings hard, allow a tiny inertial nudge but still clamp.
+          const inertial = value  // small, controlled
+          const finalVal = clamp(inertial, MIN_TRANSLATE_Y, MAX_TRANSLATE_Y);
+
+          // If we didn't change anything meaningful, just store and stop.
+          lastTranslateY.current = finalVal;
+          Animated.timing(translateY, {
+            toValue: finalVal,
+            duration: 80,
+            useNativeDriver: true,
+          }).start();
+        });
+      },
+    });
+  }, [MAX_TRANSLATE_Y, MIN_TRANSLATE_Y, translateY]);
+
+  const safeRun = (fn: () => Promise<void>) => {
+    void fn().catch((e: unknown) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert("Action failed", msg);
+    });
+  };
+
+  const onPressEmergency = () => {
+    safeRun(async () => {
+      if (isEmergency) await stopEmergency();
+      else await startEmergency();
+    });
+  };
+
+  const onPressActive = () => {
+    safeRun(async () => {
+      if (isActive) await stopActive();
+      else await startActive();
+    });
+  };
+
+  const frequencyLabel =
+    frequencySec < 60 ? `${frequencySec}s` : `${frequencySec / 60} min`;
+
+  return (
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          bottom: tabBarHeight,
+          height: MAX_VISUAL_HEIGHT,
+          transform: [{ translateY }],
+        },
+      ]}
+    >
+      {/* Handle zone is the ONLY draggable region (so slider/buttons work smoothly) */}
+      <View style={styles.handleZone} {...panResponder.panHandlers}>
+        <View style={styles.handle} />
+      </View>
+
+      <View style={[styles.content, { paddingBottom: tabBarHeight + 16 }]}>
+        {/* Header */}
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Tracking</Text>
+          <View
+            style={[
+              styles.modePill,
+              isEmergency
+                ? styles.modePillDanger
+                : isActive
+                ? styles.modePillActive
+                : styles.modePillIdle,
+            ]}
+          >
+            <Text style={styles.modePillText}>
+              {isEmergency ? "EMERGENCY" : isActive ? "ACTIVE" : "IDLE"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Actions */}
+        <View style={styles.actionsRow}>
+          <Pressable
+            onPress={onPressEmergency}
+            style={[
+              styles.bigBtn,
+              isEmergency ? styles.bigBtnDanger : styles.bigBtnNeutral,
+            ]}
+          >
+            <Text style={styles.bigBtnText}>
+              {isEmergency ? "Stop Emergency" : "Emergency"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={onPressActive}
+            style={[
+              styles.bigBtn,
+              isActive ? styles.bigBtnPrimary : styles.bigBtnNeutral,
+            ]}
+          >
+            <Text style={styles.bigBtnText}>
+              {isActive ? "Stop Tracking" : "Active Tracking"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Slider */}
+        <View style={styles.section}>
+          <View style={styles.sliderHeaderRow}>
+            <Text style={styles.sliderTitle}>Ping frequency</Text>
+            <View style={styles.sliderValuePill}>
+              <Text style={styles.sliderValueText}>{frequencyLabel} ping</Text>
+            </View>
+          </View>
+
+          <DiscreteFrequencySlider
+            valueSec={frequencySec}
+            stopsSec={STOPS}
+            onChange={setFrequency}
+            formatStopLabel={(sec) => {
+              if (sec < 60) return `${sec}s`;
+              return `${sec / 60}m`;
+            }}
+          />
+
+          <View style={styles.batteryRow}>
+            <View style={styles.batterySide}>
+              <Text style={styles.batteryIcon}>🔋</Text>
+              <Text style={styles.batteryText}>Less battery</Text>
+            </View>
+
+            <View style={styles.batterySide}>
+              <Text style={styles.batteryText}>More battery</Text>
+              <Text style={styles.batteryIcon}>🔋</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Info card */}
+        <View style={styles.section}>
+          <View style={styles.infoCard}>
+            <Text style={styles.infoTitle}>Privacy-first by default</Text>
+            <Text style={styles.infoBody}>
+              Pings are append-only events. Retries are safe. Emergency overrides
+              all states.
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+const styles = StyleSheet.create({
+  container: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    backgroundColor: "#050814",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderColor: "#1a2035",
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  handleZone: {
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#050814",
+  },
+  handle: {
+    width: 48,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "#1a2035",
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  titleRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  title: {
+    color: "#e7ecff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  modePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  modePillIdle: {
+    backgroundColor: "#0c1020",
+    borderColor: "#1a2035",
+  },
+  modePillActive: {
+    backgroundColor: "#0c1020",
+    borderColor: "#3896ff",
+  },
+  modePillDanger: {
+    backgroundColor: "#1a0a12",
+    borderColor: "#ff4b5c",
+  },
+  modePillText: {
+    color: "#e7ecff",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  actionsRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 12,
+  },
+  bigBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bigBtnNeutral: {
+    backgroundColor: "#0c1020",
+    borderColor: "#1a2035",
+  },
+  bigBtnPrimary: {
+    backgroundColor: "#0c1020",
+    borderColor: "#3896ff",
+  },
+  bigBtnDanger: {
+    backgroundColor: "#1a0a12",
+    borderColor: "#ff4b5c",
+  },
+  bigBtnText: {
+    color: "#e7ecff",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  section: {
+    marginTop: 16,
+  },
+  sliderHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  sliderTitle: {
+    color: "#e7ecff",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  sliderValuePill: {
+    backgroundColor: "#0c1020",
+    borderColor: "#1a2035",
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  sliderValueText: {
+    color: "#3896ff",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  batteryRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  batterySide: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  batteryIcon: {
+    fontSize: 14,
+    color: "#aab3d6",
+  },
+  batteryText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#aab3d6",
+  },
+  infoCard: {
+    backgroundColor: "#0c1020",
+    borderColor: "#1a2035",
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+  },
+  infoTitle: {
+    color: "#e7ecff",
+    fontSize: 14,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+  infoBody: {
+    color: "#aab3d6",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
 });
