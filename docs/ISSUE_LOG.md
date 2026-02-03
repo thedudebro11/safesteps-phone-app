@@ -509,3 +509,150 @@ Battery meaning row with icons:
 Less battery (left)
 
 More battery (right)
+
+Home Screen – Map-First Drawer Architecture
+Overview
+
+The Home screen uses a map-first layout with a height-animated bottom action drawer that behaves similarly to Life360.
+
+Key design goals:
+
+Map is always the base layer
+
+Drawer starts collapsed
+
+Drawer expands via direct drag (free-drag, no snap)
+
+Drawer never detaches from the bottom tab bar
+
+No visual gaps where the map can bleed through
+
+Drawer Positioning Model (Critical)
+
+The drawer uses a height-based animation model, not translateY.
+
+Core rule:
+
+The drawer’s bottom edge is permanently anchored to the tab bar.
+Only the top edge moves by animating height.
+
+This avoids all common bottom-sheet bugs:
+
+overscroll gaps
+
+map bleed at the bottom
+
+snap fights
+
+inconsistent collapsed states
+
+Implementation Details
+
+File:
+src/features/home/components/BottomActionDrawer.tsx
+
+Anchoring strategy
+<View
+  style={{
+    position: "absolute",
+    bottom: tabBarHeight,
+    left: 0,
+    right: 0,
+    height: MAX_HEIGHT,
+  }}
+>
+
+
+bottom: tabBarHeight is applied once at the shell level
+
+The animated drawer inside uses bottom: 0
+
+No padding or offsets related to the tab bar inside the drawer
+
+This ensures the drawer always sits flush on top of the bottom navigation bar.
+
+Height-based animation (why it works)
+
+Instead of translating the drawer vertically, we animate its height:
+
+const heightRaw = useRef(new Animated.Value(COLLAPSED_H)).current;
+
+
+Drag logic:
+
+Drag up → increase height
+
+Drag down → decrease height
+
+Height is clamped between:
+
+COLLAPSED_H
+
+MAX_HEIGHT
+
+const next = clamp(
+  lastHeight.current - gesture.dy,
+  COLLAPSED_H,
+  MAX_HEIGHT
+);
+heightRaw.setValue(next);
+
+
+This guarantees:
+
+No overshoot
+
+No bottom gaps
+
+Smooth, predictable interaction
+
+Free-drag behavior (no snapping)
+
+On release, the drawer stays exactly where the user leaves it:
+
+onPanResponderRelease: () => {
+  heightRaw.stopAnimation((value) => {
+    settleHeight(value);
+  });
+};
+
+
+This provides a more natural, tactile feel compared to snap-only drawers.
+
+Initial state reliability
+
+To prevent fast refresh / hot reload issues:
+
+useEffect(() => {
+  heightRaw.setValue(COLLAPSED_H);
+  lastHeight.current = COLLAPSED_H;
+}, []);
+
+
+The drawer always starts collapsed, even after reloads.
+
+Resulting UX
+
+Drawer expands smoothly
+
+Stops exactly where the user releases
+
+Never reveals the map underneath
+
+Always sits perfectly on top of the tab bar
+
+Matches modern “map + control surface” UX patterns
+
+Ping Frequency Slider UX
+
+The ping frequency slider is continuous, not discrete.
+
+Users can drag freely across the range
+
+Values are quantized internally (step = 5 seconds)
+
+Displayed values are formatted cleanly (seconds or minutes to 2 decimals)
+
+Battery impact is communicated visually (less ↔ more battery)
+
+This gives users fine-grained control without sacrificing safety or battery constraints.

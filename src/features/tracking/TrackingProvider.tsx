@@ -10,8 +10,23 @@ import { API_BASE_URL } from "@/src/lib/api";
 
 type TrackingMode = "idle" | "active" | "emergency";
 
-export type TrackingFrequency = 30 | 60 | 300;
- // seconds: 30s, 1m, 5m (expand later)
+export type TrackingFrequency = number;
+// seconds: 30s, 1m, 5m (expand later)
+
+// hard guardrails (keeps battery/network sane)
+export const TRACKING_FREQ_MIN_SEC = 30;
+export const TRACKING_FREQ_MAX_SEC = 300;
+export const TRACKING_FREQ_STEP_SEC = 5;
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function quantize(n: number, step: number) {
+  if (step <= 0) return n;
+  return Math.round(n / step) * step;
+}
+
 
 type LastFix = {
   lat: number;
@@ -40,6 +55,7 @@ type TrackingActions = {
   stopEmergency: () => Promise<void>;
   pingOnce: () => Promise<void>;
 };
+
 
 const TrackingContext = createContext<(TrackingState & TrackingActions) | null>(null);
 
@@ -286,8 +302,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   };
 
 
-  const pingOnce = async (modeOverride?: TrackingMode) => {
-
+  const pingOnce = async (modeOverride?: TrackingMode, freqOverride?: TrackingFrequency) => {
     setLastError(null);
 
     try {
@@ -304,34 +319,47 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       const effectiveMode = modeOverride ?? mode;
       const isEmergency = effectiveMode === "emergency";
 
-
       const result = await sendPing({ isEmergency, ...fix });
       setLastPingAt(nowMs());
-      // eslint-disable-next-line no-console
-      console.log("[Tracking] Ping OK", { mode: effectiveMode, frequencySec, isGuest: isGuestRef.current, result });
 
-
+      const effectiveFreq = freqOverride ?? frequencySec;
+      console.log("[Tracking] Ping OK", {
+        mode: effectiveMode,
+        frequencySec: effectiveFreq,
+        isGuest: isGuestRef.current,
+        result,
+      });
     } catch (e: any) {
       const msg = e?.message ? String(e.message) : "Unknown tracking error";
       setLastError(msg);
-      // eslint-disable-next-line no-console
       console.warn("[Tracking] Ping failed", msg);
     }
   };
 
-  const startLoop = async (nextMode: TrackingMode, nextFrequencySec: TrackingFrequency) => {
+
+  const startLoop = async (
+    nextMode: TrackingMode,
+    nextFrequencySec: TrackingFrequency
+  ) => {
     stopInterval();
 
-    // Immediately ping once so UI feels responsive
-    setMode(nextMode);
-    await pingOnce(nextMode);
+    // Clamp + quantize once so interval and logs always match a valid value
+    const safeFreq = quantize(
+      clamp(nextFrequencySec, TRACKING_FREQ_MIN_SEC, TRACKING_FREQ_MAX_SEC),
+      TRACKING_FREQ_STEP_SEC
+    );
 
+    setMode(nextMode);
+
+    // Immediate ping so UI feels responsive
+    await pingOnce(nextMode, safeFreq);
 
     intervalRef.current = setInterval(() => {
-      // Fire-and-forget; internal errors are tracked in state.
-      void pingOnce(nextMode);
-    }, nextFrequencySec * 1000);
+      void pingOnce(nextMode, safeFreq);
+    }, safeFreq * 1000);
   };
+
+
 
   const stopAll = async () => {
     const prevMode = mode; // capture before we change it
@@ -373,6 +401,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       // You can tune this later; for v1 this keeps it simple and explicit.
       const emergencyFreq: TrackingFrequency = 30;
 
+
       await startLoop("emergency", emergencyFreq);
     } catch (e: any) {
       Alert.alert("Location permission required", "SafeSteps needs foreground location permission to send emergency pings.");
@@ -385,14 +414,18 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setFrequency = (sec: TrackingFrequency) => {
-    setFrequencySec(sec);
+    const clamped = clamp(sec, TRACKING_FREQ_MIN_SEC, TRACKING_FREQ_MAX_SEC);
+    const stepped = quantize(clamped, TRACKING_FREQ_STEP_SEC);
+
+    setFrequencySec(stepped);
 
     // If active tracking is running, restart loop with new frequency.
     if (mode === "active") {
-      void startLoop("active", sec);
+      void startLoop("active", stepped);
     }
     // If emergency is running, we keep emergency frequency fixed at 30s for v1.
   };
+
 
   // Safety: stop timers on unmount
   useEffect(() => {
@@ -417,8 +450,23 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       stopEmergency,
       pingOnce,
     }),
-    [mode, frequencySec, isRunning, lastPingAt, lastError, hasForegroundPermission, lastFix]
+    [
+      mode,
+      frequencySec,
+      isRunning,
+      lastPingAt,
+      lastError,
+      hasForegroundPermission,
+      lastFix,
+      setFrequency,
+      startActive,
+      stopActive,
+      startEmergency,
+      stopEmergency,
+      pingOnce,
+    ]
   );
+
 
   return <TrackingContext.Provider value={value}>{children}</TrackingContext.Provider>;
 }

@@ -8,13 +8,28 @@ import {
   NativeSyntheticEvent,
   NativeTouchEvent,
   ViewStyle,
+  PanResponder,
+  
 } from "react-native";
 
 type DiscreteFrequencySliderProps<T extends number> = {
+  // Now supports continuous values (not just stops)
   valueSec: T;
+
+  // Used for “markers” + end labels (min/max are derived from first/last)
   stopsSec: readonly T[];
+
   onChange: (nextSec: T) => void;
+
+  // Optional formatting
   formatStopLabel?: (sec: T) => string;
+
+  // Step size for quantization (defaults to 5)
+  stepSec?: number;
+
+  // Optional: show “Every X” label in center (recommended)
+  showLiveValueLabel?: boolean;
+
   style?: ViewStyle;
 };
 
@@ -24,19 +39,9 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function nearestIndex(target: number, arr: readonly number[]) {
-
-  if (arr.length === 0) return 0;
-  let bestIdx = 0;
-  let bestDist = Math.abs(arr[0] - target);
-  for (let i = 1; i < arr.length; i++) {
-    const d = Math.abs(arr[i] - target);
-    if (d < bestDist) {
-      bestDist = d;
-      bestIdx = i;
-    }
-  }
-  return bestIdx;
+function quantize(n: number, step: number) {
+  if (step <= 0) return n;
+  return Math.round(n / step) * step;
 }
 
 const DEFAULT_FORMAT = (sec: number) => {
@@ -50,25 +55,22 @@ export default function DiscreteFrequencySlider<T extends number>({
   stopsSec,
   onChange,
   formatStopLabel = DEFAULT_FORMAT as (sec: T) => string,
+  stepSec = 5,
+  showLiveValueLabel = true,
   style,
 }: DiscreteFrequencySliderProps<T>) {
-
   const trackRef = useRef<View>(null);
   const [trackRect, setTrackRect] = useState<TrackRect | null>(null);
 
-  const selectedIdx = useMemo(() => {
-    const idx = stopsSec.indexOf(valueSec);
-    if (idx >= 0) return idx;
-    return nearestIndex(valueSec, stopsSec);
-  }, [valueSec, stopsSec]);
+  const minSec = (stopsSec[0] ?? 0) as number;
+  const maxSec = (stopsSec[stopsSec.length - 1] ?? 0) as number;
 
   const percent = useMemo(() => {
-    if (stopsSec.length <= 1) return 0;
-    return selectedIdx / (stopsSec.length - 1);
-  }, [selectedIdx, stopsSec.length]);
+    const range = Math.max(1, maxSec - minSec);
+    return clamp(((valueSec as number) - minSec) / range, 0, 1);
+  }, [valueSec, minSec, maxSec]);
 
   const measureTrack = useCallback(() => {
-    // measure in window so we can compare with pageX reliably
     requestAnimationFrame(() => {
       trackRef.current?.measureInWindow((x, _y, width) => {
         if (!width) return;
@@ -78,7 +80,6 @@ export default function DiscreteFrequencySlider<T extends number>({
   }, []);
 
   useEffect(() => {
-    // measure on mount and after any re-render that might move it
     measureTrack();
   }, [measureTrack]);
 
@@ -91,20 +92,23 @@ export default function DiscreteFrequencySlider<T extends number>({
 
   const commitFromPageX = useCallback(
     (pageX: number) => {
-      if (!trackRect || stopsSec.length === 0) return;
+      if (!trackRect) return;
 
-      const PADDING = 10; // inner padding so ends are actually hittable
+      // inner padding so thumb can reach ends
+      const PADDING = 12;
       const left = trackRect.x + PADDING;
       const right = trackRect.x + trackRect.width - PADDING;
+
       const x = clamp(pageX, left, right);
-
       const t = (x - left) / Math.max(1, right - left); // 0..1
-      const idxFloat = t * (stopsSec.length - 1);
-      const idx = clamp(Math.round(idxFloat), 0, stopsSec.length - 1);
 
-      onChange(stopsSec[idx]);
+      const raw = minSec + t * (maxSec - minSec);
+      const stepped = quantize(raw, stepSec);
+
+      const next = clamp(stepped, minSec, maxSec);
+      onChange(next as T);
     },
-    [trackRect, stopsSec, onChange]
+    [trackRect, minSec, maxSec, stepSec, onChange]
   );
 
   const onTrackPress = useCallback(
@@ -114,31 +118,50 @@ export default function DiscreteFrequencySlider<T extends number>({
     [commitFromPageX]
   );
 
+  // PanResponder for real dragging
+  const panResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_evt, g) => Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2,
+      onPanResponderGrant: (evt) => {
+        commitFromPageX(evt.nativeEvent.pageX);
+      },
+      onPanResponderMove: (evt) => {
+        commitFromPageX(evt.nativeEvent.pageX);
+      },
+    });
+  }, [commitFromPageX]);
+
+  const leftLabel = formatStopLabel((minSec as unknown) as T);
+  const rightLabel = formatStopLabel((maxSec as unknown) as T);
+
+  const liveLabel = useMemo(() => {
+    if (!showLiveValueLabel) return "";
+    return `Every ${formatStopLabel(valueSec)}`;
+  }, [showLiveValueLabel, valueSec, formatStopLabel]);
+
   return (
     <View style={[styles.wrap, style]}>
       <View style={styles.labelsRow}>
-        <Text style={styles.sideLabel}>{formatStopLabel(stopsSec[0] ?? 0)}</Text>
-        <Text style={styles.centerLabel}>
-          {stopsSec[selectedIdx] ? `Balanced ${formatStopLabel(stopsSec[selectedIdx])}` : "Balanced"}
-        </Text>
-        <Text style={styles.sideLabel}>
-          {formatStopLabel(stopsSec[stopsSec.length - 1] ?? 0)}
-        </Text>
+        <Text style={styles.sideLabel}>{leftLabel}</Text>
+        <Text style={styles.centerLabel}>{showLiveValueLabel ? liveLabel : "Balanced"}</Text>
+        <Text style={styles.sideLabel}>{rightLabel}</Text>
       </View>
 
       <Pressable onPress={onTrackPress} style={styles.trackPressable}>
-        <View ref={trackRef} onLayout={onTrackLayout} style={styles.track}>
-          {/* Stops */}
+        <View
+          ref={trackRef}
+          onLayout={onTrackLayout}
+          style={styles.track}
+          {...panResponder.panHandlers}
+        >
+          {/* Optional stop markers (visual guidance) */}
           {stopsSec.map((_, i) => {
-            const isActive = i === selectedIdx;
+            const p = stopsSec.length <= 1 ? 0 : i / (stopsSec.length - 1);
             return (
               <View
                 key={String(i)}
-                style={[
-                  styles.stopDot,
-                  isActive ? styles.stopDotActive : styles.stopDotInactive,
-                  { left: `${(i / Math.max(1, stopsSec.length - 1)) * 100}%` },
-                ]}
+                style={[styles.stopDot, styles.stopDotInactive, { left: `${p * 100}%` }]}
               />
             );
           })}
@@ -171,10 +194,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.7,
     fontWeight: "600",
+    color: "#aab3d6",
   },
   centerLabel: {
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "900",
+    color: "#e7ecff",
   },
   trackPressable: {
     width: "100%",
@@ -182,9 +207,9 @@ const styles = StyleSheet.create({
   track: {
     height: 28,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.55)",
+    backgroundColor: "rgba(255,255,255,0.18)",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
+    borderColor: "rgba(255,255,255,0.08)",
     justifyContent: "center",
     overflow: "hidden",
   },
@@ -197,11 +222,8 @@ const styles = StyleSheet.create({
     marginTop: -5,
     marginLeft: -5,
   },
-  stopDotActive: {
-    backgroundColor: "rgba(56,150,255,0.95)",
-  },
   stopDotInactive: {
-    backgroundColor: "rgba(0,0,0,0.15)",
+    backgroundColor: "rgba(255,255,255,0.10)",
   },
   thumb: {
     position: "absolute",
@@ -213,9 +235,9 @@ const styles = StyleSheet.create({
     marginLeft: -11,
     backgroundColor: "white",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.12)",
+    borderColor: "rgba(0,0,0,0.18)",
     shadowColor: "#000",
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.18,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
@@ -224,10 +246,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexDirection: "row",
     justifyContent: "space-between",
-    opacity: 0.7,
+    opacity: 0.8,
   },
   hint: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
+    color: "#aab3d6",
   },
 });
