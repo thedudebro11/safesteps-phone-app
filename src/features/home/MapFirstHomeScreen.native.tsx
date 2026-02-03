@@ -1,35 +1,71 @@
-import React from "react";
+// src/features/home/MapFirstHomeScreen.native.tsx
+import React, { useEffect, useMemo, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Region } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import  BottomActionDrawer  from "@/src/features/home/components/BottomActionDrawer";
+
+import BottomActionDrawer from "@/src/features/home/components/BottomActionDrawer";
+import { useTracking } from "@/src/features/tracking/TrackingProvider";
 
 export default function MapFirstHomeScreen() {
   const insets = useSafeAreaInsets();
-
-  // Your tab bar is roughly ~64px; keep it slightly generous so the drawer
-  // never fights the bottom tabs.
   const tabBarHeight = useBottomTabBarHeight();
+
+  const mapRef = useRef<MapView>(null);
+
+  const { mode, lastFix } = useTracking();
+
+  // ✅ Only allow map to show/follow user when tracking is actually running
+  const allowMapLocation = mode === "active" || mode === "emergency";
+
+  // Neutral initial region (does not require permissions)
+  const DEFAULT_REGION: Region = useMemo(
+    () => ({
+      latitude: 32.2226,
+      longitude: -110.9747,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
+    }),
+    []
+  );
+
+  // ✅ When tracking turns on (and we have a fix), center on it.
+  // ✅ When tracking turns off, we do NOT auto-center on the user.
+  useEffect(() => {
+    if (!allowMapLocation) return;
+    if (!lastFix) return;
+
+    mapRef.current?.animateToRegion(
+      {
+        latitude: lastFix.lat,
+        longitude: lastFix.lng,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      },
+      350
+    );
+  }, [allowMapLocation, lastFix]);
 
   return (
     <View style={styles.root}>
       {/* MAP BASE LAYER */}
       <MapView
+        ref={mapRef}
         style={StyleSheet.absoluteFill}
-        initialRegion={{
-          latitude: 32.2226,
-          longitude: -110.9747,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
+        initialRegion={DEFAULT_REGION}
         pitchEnabled
         rotateEnabled
         zoomEnabled
         scrollEnabled
         toolbarEnabled={false}
+        // ✅ HARD GATE location display
+        showsUserLocation={allowMapLocation}
+        followsUserLocation={allowMapLocation}
+        showsMyLocationButton={allowMapLocation}
       >
-        <Marker coordinate={{ latitude: 32.2226, longitude: -110.9747 }} />
+        {/* Optional: keep your “Tucson marker” (neutral, not user). */}
+        
       </MapView>
 
       {/* TOP OVERLAY */}

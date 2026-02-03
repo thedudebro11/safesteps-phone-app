@@ -652,3 +652,31 @@ Typing / invariants:
 ### Navigation additions
 - `/(tabs)/membership` route exists (placeholder or active)
 - `babel.config.js` and `tsconfig.json` may include aliasing config used across the app
+
+
+## Home Map Behavior (Privacy-Safe by Default)
+
+The Home screen is **map-first**, but intentionally does **not** reveal the user’s live location until tracking is explicitly enabled.
+
+### Default (Idle) State
+- Map renders using a **neutral initial region**
+- **No user location dot**
+- **No auto-centering or following**
+- No location permissions are implicitly triggered
+- The map acts as a passive context layer only
+
+This prevents accidental location exposure on app launch and aligns with SafeSteps’ privacy-first principles.
+
+### Active / Emergency Tracking State
+When tracking mode transitions to **Active** or **Emergency**:
+
+- `showsUserLocation` is enabled
+- The map is allowed to follow the user
+- When a valid location fix (`lastFix`) is received:
+  - The map animates to the user’s location
+- Emergency mode behaves the same visually, but with higher-frequency pings
+
+### Implementation Details
+- Map behavior is gated by tracking mode:
+  ```ts
+  const allowMapLocation = mode === "active" || mode === "emergency";
