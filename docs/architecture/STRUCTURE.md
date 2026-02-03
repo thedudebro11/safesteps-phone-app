@@ -108,3 +108,5 @@ To avoid async state race conditions:
 - Emergency mode is disabled only when the final emergency share is removed.
 
 This pattern prevents stale UI and ensures cross-screen consistency.
+
+

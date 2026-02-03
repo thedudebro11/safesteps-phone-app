@@ -331,3 +331,73 @@ Guest mode is a first-class session type.
 - `_layout.tsx` automatically redirects to `/login`
 
 Settings screens must NOT navigate manually.
+
+
+Profile Row Auto-Creation (Critical Invariant)
+
+Invariant:
+Every authenticated Supabase user must have exactly one corresponding row in public.profiles.
+
+This is required for:
+
+user lookup by email
+
+trusted contacts
+
+visibility permissions
+
+live map sharing
+
+How it’s enforced
+
+The app does not rely on database triggers.
+
+Instead, the profile row is ensured at runtime inside the AuthProvider whenever a valid Supabase session is detected.
+
+Location:
+
+src/features/auth/AuthProvider.tsx
+
+
+Mechanism:
+
+On app startup (getSession)
+
+On auth state changes (onAuthStateChange)
+
+On successful sign-in / sign-up
+
+The app performs an idempotent upsert into profiles using user_id as the conflict key.
+
+await supabase
+  .from("profiles")
+  .upsert(
+    {
+      user_id: user.id,
+      email: user.email ?? null,
+      display_name: user.user_metadata?.display_name ?? null,
+    },
+    { onConflict: "user_id" }
+  );
+
+Duplicate protection
+
+Because React StrictMode and auth listeners can fire multiple times in development, the app guards against duplicate writes using an in-memory Set:
+
+const ensuringRef = useRef<Set<string>>(new Set());
+
+
+Each user ID is only upserted once per app runtime, unless an error occurs (in which case retries are allowed).
+
+Why this approach
+
+Avoids hidden DB triggers
+
+Works across web + native
+
+Keeps profile lifecycle explicit and debuggable
+
+Guarantees lookup consistency for all downstream features
+
+Do not remove or bypass this logic.
+Downstream systems (trusted contacts, live visibility, live presence) assume this invariant is always true.

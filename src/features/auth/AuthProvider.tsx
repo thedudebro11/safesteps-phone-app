@@ -67,6 +67,7 @@ async function writeGuestFlag(on: boolean): Promise<void> {
 
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [guestMode, setGuestMode] = useState<boolean>(false);
@@ -74,6 +75,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthLoaded, setIsAuthLoaded] = useState<boolean>(false);
   const [isAuthActionLoading, setIsAuthActionLoading] =
     useState<boolean>(false);
+
+  const ensuringRef = React.useRef<Set<string>>(new Set());
+
+  const ensureProfileRow = React.useCallback(async (u: User) => {
+    // Prevent duplicate upserts for same user in this app session
+    if (ensuringRef.current.has(u.id)) return;
+    ensuringRef.current.add(u.id);
+    
+
+    const payload = {
+      user_id: u.id,
+      email: u.email ?? null,
+      display_name: (u.user_metadata as any)?.display_name ?? null,
+    };
+
+    const { error } = await supabase
+      .from("profiles")
+      .upsert(payload, { onConflict: "user_id" });
+      
+
+    if (error) {
+      console.warn("[AuthProvider] ensureProfileRow failed:", error.message, payload);
+      ensuringRef.current.delete(u.id); // allow retry later
+    } else {
+      console.log("[AuthProvider] ensureProfileRow OK", { user_id: u.id });
+    }
+  }, []);
+
 
 
 
@@ -98,6 +127,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session ?? null);
         setUser(session?.user ?? null);
 
+        if (session?.user) {
+          void ensureProfileRow(session.user);
+        }
+
         // ✅ Restore guest on web refresh if no real session exists
         // ✅ Restore guest flag (web + native) if no real session exists
         const storedGuest = await readGuestFlag();
@@ -118,26 +151,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     loadSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       setSession(newSession ?? null);
       setUser(newSession?.user ?? null);
 
-      // ✅ Only force guestMode off when a real user session exists.
-      // If session becomes null (SIGNED_OUT), do NOT turn guestMode off.
       if (newSession?.user) {
+        void ensureProfileRow(newSession.user);
+
         setGuestMode(false);
         void writeGuestFlag(false);
         console.log("[AuthProvider] Supabase user session detected → disabling guestMode");
       }
-
     });
+
 
 
     return () => {
       isMounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [ensureProfileRow]);
 
   // --- Guest Mode API ---
 
@@ -198,6 +231,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(data.session ?? null);
         setUser(data.user ?? null);
+
+        if (data.user) {
+          void ensureProfileRow(data.user);
+        }
       } catch (err) {
         console.warn("[AuthProvider] unexpected signIn error:", err);
         Alert.alert("Sign in failed", "Unexpected error. Please try again.");
@@ -227,6 +264,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(data.session ?? null);
         setUser(data.user ?? null);
+
+        if (data.user) {
+          void ensureProfileRow(data.user);
+        }
+
       } catch (err) {
         console.warn("[AuthProvider] unexpected signUp error:", err);
         Alert.alert("Sign up failed", "Unexpected error. Please try again.");
