@@ -656,3 +656,49 @@ Displayed values are formatted cleanly (seconds or minutes to 2 decimals)
 Battery impact is communicated visually (less ↔ more battery)
 
 This gives users fine-grained control without sacrificing safety or battery constraints.
+
+Bug Fix: Emergency share state didn’t clear when emergency stopped
+
+Problem
+
+When a user started Emergency, then shared a live location link to a contact, the UI would correctly show “sharing.”
+
+After turning Emergency OFF, the tracking loop stopped — but the app still showed the contact/share as actively sharing.
+
+Result: the contact/share screens stayed “stuck” in a live state until manually ended.
+
+Root cause
+
+stopAll() only ended shares for "active" mode.
+
+Emergency mode shutdown wasn’t ending live share sessions, so ShareSession.status remained "live".
+
+Fix
+
+Updated stopAll() in TrackingProvider.tsx to end all live shares when exiting either:
+
+"active" or
+
+"emergency"
+
+This keeps share state consistent with tracking state: stopping tracking now guarantees no live shares remain.
+
+Files changed
+
+src/features/tracking/TrackingProvider.tsx
+
+src/features/shares/SharesProvider.tsx (only if you also adjusted anything here; otherwise remove)
+
+Verification
+
+Start Emergency
+
+Create a share for a contact (reason "emergency")
+
+Stop Emergency
+
+Confirm:
+
+share session(s) become status: "ended"
+
+UI immediately stops showing “sharing”

@@ -362,16 +362,19 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
 
   const stopAll = async () => {
-    const prevMode = mode; // capture before we change it
-    console.log("[Tracking] stopAll", { prevMode });
-    stopInterval();
-    setMode("idle");
+  const prevMode = mode;
+  console.log("[Tracking] stopAll", { prevMode });
 
-    // If we were actively tracking, kill manual shares too
-    if (prevMode === "active") {
-      await endAllLiveShares();
-    }
-  };
+  stopInterval();
+  setMode("idle");
+
+  // ✅ Always end live shares when leaving active OR emergency.
+  // endAllLiveShares() is already a no-op if none exist.
+  if (prevMode === "active" || prevMode === "emergency") {
+    await endAllLiveShares();
+  }
+};
+
 
 
   const startActive = async () => {
