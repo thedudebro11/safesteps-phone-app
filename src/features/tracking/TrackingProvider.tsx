@@ -1,19 +1,14 @@
+// src/features/tracking/TrackingProvider.tsx
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
 import { Alert } from "react-native";
-import { useAuth } from "@/src/features/auth/AuthProvider";
 import { supabase } from "@/src/lib/supabase";
 import { useShares } from "@/src/features/shares/SharesProvider";
 import { API_BASE_URL } from "@/src/lib/api";
 
-
-
 type TrackingMode = "idle" | "active" | "emergency";
-
 export type TrackingFrequency = number;
-// seconds: 30s, 1m, 5m (expand later)
 
-// hard guardrails (keeps battery/network sane)
 export const TRACKING_FREQ_MIN_SEC = 30;
 export const TRACKING_FREQ_MAX_SEC = 300;
 export const TRACKING_FREQ_STEP_SEC = 5;
@@ -21,12 +16,10 @@ export const TRACKING_FREQ_STEP_SEC = 5;
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
-
 function quantize(n: number, step: number) {
   if (step <= 0) return n;
   return Math.round(n / step) * step;
 }
-
 
 type LastFix = {
   lat: number;
@@ -34,7 +27,6 @@ type LastFix = {
   accuracyM: number | null;
   timestampMs: number;
 };
-
 
 type TrackingState = {
   mode: TrackingMode;
@@ -44,7 +36,6 @@ type TrackingState = {
   lastError: string | null;
   hasForegroundPermission: boolean;
   lastFix: LastFix | null;
-
 };
 
 type TrackingActions = {
@@ -56,10 +47,7 @@ type TrackingActions = {
   pingOnce: () => Promise<void>;
 };
 
-
 const TrackingContext = createContext<(TrackingState & TrackingActions) | null>(null);
-
-
 
 function nowMs() {
   return Date.now();
@@ -67,10 +55,9 @@ function nowMs() {
 
 async function getForegroundPermissionOrThrow(): Promise<void> {
   const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== "granted") {
-    throw new Error("Location permission not granted.");
-  }
+  if (status !== "granted") throw new Error("Location permission not granted.");
 }
+
 async function getAccessTokenSafe(): Promise<string | null> {
   try {
     const { data } = await supabase.auth.getSession();
@@ -81,13 +68,9 @@ async function getAccessTokenSafe(): Promise<string | null> {
 }
 
 async function getOneFix() {
-  // Balanced defaults. We’ll tune later for battery/accuracy tradeoffs.
   const loc = await Location.getCurrentPositionAsync({
     accuracy: Location.Accuracy.Balanced,
   });
-
-
-
 
   return {
     lat: loc.coords.latitude,
@@ -101,91 +84,30 @@ async function getOneFix() {
 }
 
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
-  const { isGuest, hasSession } = useAuth();
-  const {
-    endAllLiveShares,
-    getActiveShares,
-    isLoaded: sharesLoaded,
-    activeShareToken,
-  } = useShares();
-
-
-
-
+  const { endAllLiveShares, getActiveShares, isLoaded: sharesLoaded, activeShareToken } = useShares();
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isGuestRef = useRef(isGuest);
-
   const stopInterval = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
   };
+
   const activeShareTokenRef = useRef<string | null>(activeShareToken);
   const bootReconciledRef = useRef(false);
-
 
   useEffect(() => {
     activeShareTokenRef.current = activeShareToken;
   }, [activeShareToken]);
 
   useEffect(() => {
-    // If auth state says "no session at all", kill tracking immediately.
-    // (Prevents stray pings during transitions.)
-    if (!hasSession) {
-      stopInterval();
-      setMode("idle");
-    }
-  }, [hasSession]);
-
-
-  useEffect(() => {
     if (!__DEV__) return;
-
-    let cancelled = false;
-
     fetch(`${API_BASE_URL}/health`)
       .then((r) => r.json())
-      .then((j) => {
-        if (!cancelled) {
-          console.log("[API] /health", j, { baseUrl: API_BASE_URL });
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          console.warn("[API] /health failed", String(e), {
-            baseUrl: API_BASE_URL,
-          });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+      .then((j) => console.log("[API] /health", j, { baseUrl: API_BASE_URL }))
+      .catch((e) => console.warn("[API] /health failed", String(e), { baseUrl: API_BASE_URL }));
   }, []);
-
-  useEffect(() => {
-    if (!__DEV__) return;
-    console.log("API_BASE_URL:", API_BASE_URL);
-  }, []);
-
-
-
-  useEffect(() => {
-    isGuestRef.current = isGuest;
-  }, [isGuest]);
-  useEffect(() => {
-    if (isGuest) {
-      stopInterval();
-      setMode("idle");
-    }
-  }, [isGuest]);
-
-
-
-
-
 
   const [mode, setMode] = useState<TrackingMode>("idle");
   const [frequencySec, setFrequencySec] = useState<TrackingFrequency>(60);
@@ -197,23 +119,18 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!sharesLoaded) return;
     if (bootReconciledRef.current) return;
-
     bootReconciledRef.current = true;
 
     if (mode === "idle") {
       const active = getActiveShares();
       if (active.length > 0) {
-        console.log("[Boot] Ending stale live shares after restart", {
-          count: active.length,
-        });
+        console.log("[Boot] Ending stale live shares after restart", { count: active.length });
         void endAllLiveShares();
       }
     }
   }, [sharesLoaded, mode, getActiveShares, endAllLiveShares]);
 
-
   const isRunning = mode !== "idle";
-
 
   const ensurePermission = async () => {
     try {
@@ -235,72 +152,37 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     speedMps: number | null;
     timestampMs: number;
   }) => {
-    const isGuestNow = isGuestRef.current;
-    const shareToken = activeShareTokenRef.current;
-
-    if (isGuestNow) {
-      // ✅ Option B: guest can only send NETWORK pings if a live share exists
-      if (!shareToken) {
-        console.log("[Tracking] Guest ping blocked (no active share)", payload);
-        return { ok: true, guest: true, blocked: "no_active_share" };
-      }
-    }
-
-
-
-    if (!API_BASE_URL) {
-      console.warn("[Tracking] Missing API_BASE_URL — ping not sent.");
-      throw new Error("Missing API_BASE_URL");
-    }
-
+    if (!API_BASE_URL) throw new Error("Missing API_BASE_URL");
 
     const endpoint = payload.isEmergency ? "/api/emergency" : "/api/locations";
 
-    // Pull token from Supabase directly to avoid stale session object issues.
     const token = await getAccessTokenSafe();
+    if (!token) throw new Error("Missing access token (sign in required)");
 
-    if (!token) {
-      // eslint-disable-next-line no-console
-      console.warn("[Tracking] Missing access token — sending WITHOUT Authorization header (dev).");
-    }
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (token) headers.Authorization = `Bearer ${token}`;
-
-    let res: Response;
-    try {
-      res = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          lat: payload.lat,
-          lng: payload.lng,
-          accuracyM: payload.accuracyM,
-          altitudeM: payload.altitudeM,
-          headingDeg: payload.headingDeg,
-          speedMps: payload.speedMps,
-          timestampMs: payload.timestampMs,
-          isGuest: isGuestNow,
-          shareToken: isGuestNow ? shareToken : null,
-        }),
-      });
-    } catch (e: any) {
-      // eslint-disable-next-line no-console
-      console.warn("[Tracking] Network error", e?.message ?? e);
-      throw e;
-    }
+    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        lat: payload.lat,
+        lng: payload.lng,
+        accuracyM: payload.accuracyM,
+        altitudeM: payload.altitudeM,
+        headingDeg: payload.headingDeg,
+        speedMps: payload.speedMps,
+        timestampMs: payload.timestampMs,
+      }),
+    });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`Ping failed (${res.status}): ${text || "Unknown error"}`);
     }
 
-    const json = await res.json().catch(() => ({}));
-    return json;
+    return res.json().catch(() => ({}));
   };
-
 
   const pingOnce = async (modeOverride?: TrackingMode, freqOverride?: TrackingFrequency) => {
     setLastError(null);
@@ -309,49 +191,40 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       await ensurePermission();
 
       const fix = await getOneFix();
-      setLastFix({
-        lat: fix.lat,
-        lng: fix.lng,
-        accuracyM: fix.accuracyM,
-        timestampMs: fix.timestampMs,
-      });
+      setLastFix({ lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM, timestampMs: fix.timestampMs });
 
       const effectiveMode = modeOverride ?? mode;
-      const isEmergency = effectiveMode === "emergency";
+      const result = await sendPing({ isEmergency: effectiveMode === "emergency", ...fix });
 
-      const result = await sendPing({ isEmergency, ...fix });
       setLastPingAt(nowMs());
 
-      const effectiveFreq = freqOverride ?? frequencySec;
       console.log("[Tracking] Ping OK", {
         mode: effectiveMode,
-        frequencySec: effectiveFreq,
-        isGuest: isGuestRef.current,
+        frequencySec: freqOverride ?? frequencySec,
         result,
       });
     } catch (e: any) {
       const msg = e?.message ? String(e.message) : "Unknown tracking error";
       setLastError(msg);
       console.warn("[Tracking] Ping failed", msg);
+
+      // If they got signed out or token expired, stop loop immediately.
+      if (String(msg).toLowerCase().includes("missing access token") || String(msg).includes("401")) {
+        stopInterval();
+        setMode("idle");
+      }
     }
   };
 
-
-  const startLoop = async (
-    nextMode: TrackingMode,
-    nextFrequencySec: TrackingFrequency
-  ) => {
+  const startLoop = async (nextMode: TrackingMode, nextFrequencySec: TrackingFrequency) => {
     stopInterval();
 
-    // Clamp + quantize once so interval and logs always match a valid value
     const safeFreq = quantize(
       clamp(nextFrequencySec, TRACKING_FREQ_MIN_SEC, TRACKING_FREQ_MAX_SEC),
       TRACKING_FREQ_STEP_SEC
     );
 
     setMode(nextMode);
-
-    // Immediate ping so UI feels responsive
     await pingOnce(nextMode, safeFreq);
 
     intervalRef.current = setInterval(() => {
@@ -359,33 +232,24 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     }, safeFreq * 1000);
   };
 
-
-
   const stopAll = async () => {
-  const prevMode = mode;
-  console.log("[Tracking] stopAll", { prevMode });
+    const prevMode = mode;
+    stopInterval();
+    setMode("idle");
 
-  stopInterval();
-  setMode("idle");
-
-  // ✅ Always end live shares when leaving active OR emergency.
-  // endAllLiveShares() is already a no-op if none exist.
-  if (prevMode === "active" || prevMode === "emergency") {
-    await endAllLiveShares();
-  }
-};
-
-
+    if (prevMode === "active" || prevMode === "emergency") {
+      await endAllLiveShares();
+    }
+  };
 
   const startActive = async () => {
-    // If emergency is on, active tracking should not override it.
     if (mode === "emergency") return;
 
     try {
       await ensurePermission();
       await startLoop("active", frequencySec);
-    } catch (e: any) {
-      Alert.alert("Location permission required", "SafeSteps needs foreground location permission to send pings.");
+    } catch {
+      Alert.alert("Location permission required", "Lume needs foreground location permission to send pings.");
     }
   };
 
@@ -394,20 +258,13 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     await stopAll();
   };
 
-
-
-
   const startEmergency = async () => {
     try {
       await ensurePermission();
-      // Emergency overrides any active mode and uses a high-frequency baseline.
-      // You can tune this later; for v1 this keeps it simple and explicit.
       const emergencyFreq: TrackingFrequency = 30;
-
-
       await startLoop("emergency", emergencyFreq);
-    } catch (e: any) {
-      Alert.alert("Location permission required", "SafeSteps needs foreground location permission to send emergency pings.");
+    } catch {
+      Alert.alert("Location permission required", "Lume needs foreground location permission to send emergency pings.");
     }
   };
 
@@ -417,25 +274,15 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setFrequency = (sec: TrackingFrequency) => {
-    const clamped = clamp(sec, TRACKING_FREQ_MIN_SEC, TRACKING_FREQ_MAX_SEC);
-    const stepped = quantize(clamped, TRACKING_FREQ_STEP_SEC);
-
+    const stepped = quantize(clamp(sec, TRACKING_FREQ_MIN_SEC, TRACKING_FREQ_MAX_SEC), TRACKING_FREQ_STEP_SEC);
     setFrequencySec(stepped);
 
-    // If active tracking is running, restart loop with new frequency.
     if (mode === "active") {
       void startLoop("active", stepped);
     }
-    // If emergency is running, we keep emergency frequency fixed at 30s for v1.
   };
 
-
-  // Safety: stop timers on unmount
-  useEffect(() => {
-    return () => stopInterval();
-  }, []);
-
-
+  useEffect(() => () => stopInterval(), []);
 
   const value = useMemo(
     () => ({
@@ -451,25 +298,10 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       stopActive,
       startEmergency,
       stopEmergency,
-      pingOnce,
+      pingOnce: () => pingOnce(),
     }),
-    [
-      mode,
-      frequencySec,
-      isRunning,
-      lastPingAt,
-      lastError,
-      hasForegroundPermission,
-      lastFix,
-      setFrequency,
-      startActive,
-      stopActive,
-      startEmergency,
-      stopEmergency,
-      pingOnce,
-    ]
+    [mode, frequencySec, isRunning, lastPingAt, lastError, hasForegroundPermission, lastFix]
   );
-
 
   return <TrackingContext.Provider value={value}>{children}</TrackingContext.Provider>;
 }

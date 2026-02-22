@@ -16,41 +16,18 @@ const CARD_BG = "#0c1020";
 const BORDER = "#1a2035";
 const ACCENT = "#3896ff";
 const MUTED = "#a6b1cc";
-const DANGER = "#ff4b5c";
 
 export default function LoginScreen() {
-  const {
-    signInWithEmail,
-    startGuestSession,
-    isAuthActionLoading,
-  } = useAuth();
+  const { signInWithEmail, isAuthActionLoading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
     if (!email || !password) return;
-
-    try {
-      await signInWithEmail(email.trim(), password);
-      // Root layout + hasSession will keep user in tabs,
-      // but this makes it snappy.
-      
-    } catch (err) {
-      console.error("[Login] Error during sign in:", err);
-      // You can add a toast/Alert here later
-    }
+    await signInWithEmail(email.trim(), password);
+    // RootNavigator redirect will handle routing after auth state updates
   };
-
-  const handleGuest = async () => {
-  try {
-    await startGuestSession();
-    
-  } catch (err) {
-    console.error("[Login] Error starting guest session:", err);
-  }
-};
-
 
   const handleGoToRegister = () => {
     router.push("/register");
@@ -62,7 +39,7 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <Text style={styles.title}>SafeSteps</Text>
-        <Text style={styles.subtitle}>Log in or continue as guest</Text>
+        <Text style={styles.subtitle}>Sign in to continue</Text>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Sign in</Text>
@@ -89,10 +66,7 @@ export default function LoginScreen() {
           />
 
           <Pressable
-            style={[
-              styles.primaryButton,
-              disableAuthButtons && styles.disabled,
-            ]}
+            style={[styles.primaryButton, disableAuthButtons && styles.disabled]}
             onPress={handleLogin}
             disabled={disableAuthButtons}
           >
@@ -101,32 +75,12 @@ export default function LoginScreen() {
             </Text>
           </Pressable>
 
-          {/* NEW: Sign Up / Create account button */}
           <Pressable
             style={styles.secondaryButton}
             onPress={handleGoToRegister}
             disabled={disableAuthButtons}
           >
-            <Text style={styles.secondaryButtonText}>
-              Create an account
-            </Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.guestCard}>
-          <Text style={styles.guestTitle}>Just want to try it?</Text>
-          <Text style={styles.guestText}>
-            Use SafeSteps in guest mode. Data stays on this device only.
-          </Text>
-
-          <Pressable
-            style={styles.guestButton}
-            onPress={handleGuest}
-            disabled={isAuthActionLoading}
-          >
-            <Text style={styles.guestButtonText}>
-              {isAuthActionLoading ? "Starting…" : "Continue as Guest"}
-            </Text>
+            <Text style={styles.secondaryButtonText}>Create an account</Text>
           </Pressable>
         </View>
       </View>
@@ -210,38 +164,6 @@ const styles = StyleSheet.create({
     color: ACCENT,
     fontSize: 14,
     fontWeight: "600",
-  },
-  guestCard: {
-    marginTop: 20,
-    backgroundColor: "transparent",
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: BORDER,
-    gap: 8,
-  },
-  guestTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  guestText: {
-    color: MUTED,
-    fontSize: 13,
-  },
-  guestButton: {
-    marginTop: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: DANGER,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  guestButtonText: {
-    color: DANGER,
-    fontSize: 14,
-    fontWeight: "700",
   },
   disabled: {
     opacity: 0.6,

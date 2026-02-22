@@ -4,22 +4,17 @@ import { readJson, writeJson } from "@/src/lib/storage";
 import { createId } from "@/src/lib/ids";
 import type { ShareSession } from "./types";
 import type { Contact } from "@/src/features/contacts/types";
-import { useAuth } from "@/src/features/auth/AuthProvider";
 import { API_BASE_URL } from "@/src/lib/api";
-
 
 type SharesContextValue = {
   shares: ShareSession[];
   isLoaded: boolean;
 
-  // ✅ Option B gates
+  // Option B gates
   activeShareToken: string | null;
   hasActiveShare: boolean;
 
-  createShareForContact(
-    contact: Contact,
-    reason?: "manual" | "emergency"
-  ): Promise<ShareSession>;
+  createShareForContact(contact: Contact, reason?: "manual" | "emergency"): Promise<ShareSession>;
 
   endShare(shareId: string): Promise<void>;
   getActiveShareByContactId(contactId: string): ShareSession | undefined;
@@ -32,17 +27,13 @@ const SharesContext = createContext<SharesContextValue | null>(null);
 
 const STORAGE_KEY = "safesteps.shares.v1";
 
-
-
-
-
 async function registerShareToken(token: string, reason: "manual" | "emergency") {
-  if (!API_BASE_URL) return; // allow offline/dev without server
+  if (!API_BASE_URL) return;
   await fetch(`${API_BASE_URL}/api/shares/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, reason }),
-  }).catch(() => { });
+  }).catch(() => {});
 }
 
 async function endShareToken(token: string) {
@@ -51,16 +42,13 @@ async function endShareToken(token: string) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),
-  }).catch(() => { });
+  }).catch(() => {});
 }
-
 
 export function SharesProvider({ children }: { children: React.ReactNode }) {
   const [shares, setShares] = useState<ShareSession[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
-  const { isGuest } = useAuth();
   const hydratedOnceRef = useRef(false);
-
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -68,11 +56,8 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
     fetch(`${API_BASE_URL}/health`)
       .then((r) => r.json())
       .then((j) => console.log("[API] /health (shares)", j))
-      .catch((e) =>
-        console.warn("[API] /health failed (shares)", String(e))
-      );
+      .catch((e) => console.warn("[API] /health failed (shares)", String(e)));
   }, []);
-
 
   useEffect(() => {
     if (hydratedOnceRef.current) return;
@@ -83,16 +68,13 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
       const loaded = Array.isArray(saved) ? saved : [];
       setShares(loaded);
       setIsLoaded(true);
-
       console.log("[Shares] hydrated", { count: loaded.length });
     })();
   }, []);
 
-
-
   useEffect(() => {
     if (!isLoaded) return;
-    writeJson(STORAGE_KEY, shares).catch(() => { });
+    writeJson(STORAGE_KEY, shares).catch(() => {});
   }, [shares, isLoaded]);
 
   const value = useMemo<SharesContextValue>(() => {
@@ -115,20 +97,13 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
 
           const endedAt = new Date().toISOString();
           return prev.map((s) =>
-            s.status === "live" && s.reason !== "emergency"
-              ? { ...s, status: "ended", endedAt }
-              : s
+            s.status === "live" && s.reason !== "emergency" ? { ...s, status: "ended", endedAt } : s
           );
         });
 
-        console.log("[Shares] endAllManualShares called", { count: manualLive.length });
         if (manualLive.length === 0) return;
 
-        await Promise.all(
-          manualLive.map((s) => (s.token ? endShareToken(s.token) : Promise.resolve()))
-        );
-
-        console.log("[Shares] endAllManualShares ended", manualLive.map((s) => s.id));
+        await Promise.all(manualLive.map((s) => (s.token ? endShareToken(s.token) : Promise.resolve())));
       },
 
       async endAllLiveShares() {
@@ -139,54 +114,16 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
           if (live.length === 0) return prev;
 
           const endedAt = new Date().toISOString();
-          return prev.map((s) =>
-            s.status === "live" ? { ...s, status: "ended", endedAt } : s
-          );
+          return prev.map((s) => (s.status === "live" ? { ...s, status: "ended", endedAt } : s));
         });
 
-        console.log("[Shares] endAllLiveShares called", { count: live.length });
         if (live.length === 0) return;
 
-        await Promise.all(
-          live.map((s) => (s.token ? endShareToken(s.token) : Promise.resolve()))
-        );
-
-        console.log("[Shares] endAllLiveShares ended", live.map((s) => s.id));
+        await Promise.all(live.map((s) => (s.token ? endShareToken(s.token) : Promise.resolve())));
       },
 
-
-
-
-      async createShareForContact(
-        contact: Contact,
-        reason: "manual" | "emergency" = "manual"
-      ) {
+      async createShareForContact(contact: Contact, reason: "manual" | "emergency" = "manual") {
         const existing = shares.find((s) => s.contactId === contact.id && s.status === "live");
-        const existingLive = shares.find((s) => s.status === "live");
-
-        // ✅ Guest can only have one LIVE share total
-        if (isGuest && existingLive) {
-          // Same contact: reuse and optionally upgrade reason
-          if (existingLive.contactId === contact.id) {
-            if (reason === "emergency" && existingLive.reason !== "emergency") {
-              // 1) update local state
-              setShares((prev) =>
-                prev.map((s) => (s.id === existingLive.id ? { ...s, reason: "emergency" } : s))
-              );
-              // 2) update server registry too
-              await registerShareToken(existingLive.token, "emergency");
-              return { ...existingLive, reason: "emergency" };
-            }
-
-            // Ensure server knows this token exists (in case share was created before server ran)
-            await registerShareToken(existingLive.token, existingLive.reason);
-            return existingLive;
-          }
-
-          throw new Error("Guest can only have 1 active share. End current share first.");
-        }
-
-        // Non-guest: reuse per-contact share if already live
         if (existing) {
           await registerShareToken(existing.token, existing.reason);
           return existing;
@@ -206,14 +143,10 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
           startedAt: new Date().toISOString(),
         };
 
-        // Register with server first (fine either way; this makes debugging clearer)
         await registerShareToken(next.token, reason);
-
         setShares((prev) => [next, ...prev]);
         return next;
       },
-
-
 
       async endShare(shareId: string) {
         let endingToken: string | null = null;
@@ -230,9 +163,7 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (endingToken) await endShareToken(endingToken);
-      }
-      ,
-
+      },
 
       getActiveShareByContactId(contactId: string) {
         return shares.find((s) => s.contactId === contactId && s.status === "live");
@@ -242,7 +173,7 @@ export function SharesProvider({ children }: { children: React.ReactNode }) {
         return shares.filter((s) => s.status === "live");
       },
     };
-  }, [shares, isLoaded, isGuest]);
+  }, [shares, isLoaded]);
 
   return <SharesContext.Provider value={value}>{children}</SharesContext.Provider>;
 }

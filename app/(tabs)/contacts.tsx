@@ -1,25 +1,18 @@
 // app/(tabs)/contacts.tsx
 import React, { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
-  View,
-  Pressable,
-  Modal,
   TextInput,
-  FlatList,
-  Alert,
+  View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-
-import { useContacts } from "@/src/features/contacts/ContactsProvider";
-import { useShares } from "@/src/features/shares/SharesProvider";
-import { confirm } from "@/src/lib/confirm";
-import { useTracking } from "@/src/features/tracking/TrackingProvider";
-import { shouldStopEmergencyAfterEndingShare } from "@/src/features/shares/emergencySync";
-import { useAuth } from "@/src/features/auth/AuthProvider";
-
+import { useTrustedContacts } from "@/src/features/trust/useTrustedContacts";
+import type { TrustedContact } from "@/src/features/trust/types";
 
 const BG = "#050814";
 const CARD_BG = "#0c1020";
@@ -27,139 +20,94 @@ const BORDER = "#1a2035";
 const ACCENT = "#3896ff";
 const MUTED = "#a6b1cc";
 const DANGER = "#ff4b5c";
+const OK = "#34d399";
 
-type ContactFormState = {
-  name: string;
-  phone: string;
-  email: string;
-};
+function Toggle({ value }: { value: boolean }) {
+  return (
+    <View style={[styles.toggle, value ? styles.toggleOn : styles.toggleOff]}>
+      <View style={[styles.toggleKnob, value ? styles.toggleKnobOn : styles.toggleKnobOff]} />
+    </View>
+  );
+}
 
-export default function ContactsScreen() {
-  const router = useRouter();
-  const params = useLocalSearchParams<{ share?: string }>();
-  const inShareMode = params.share === "1";
+export default function TrustedScreen() {
+  const {
+    contacts,
+    incoming,
+    isLoading,
+    errorMsg,
+    refetch,
+    setShareEnabled,
+    lookupUserByEmail,
+    sendTrustRequest,
+    acceptRequest,
+    denyRequest,
+  } = useTrustedContacts();
 
-  const { contacts, addContact, removeContact, isLoaded } = useContacts();
-  const { createShareForContact, getActiveShareByContactId, getActiveShares, endShare } =
-    useShares();
-  const { mode, stopEmergency } = useTracking();
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const canShare = mode !== "idle";
+  const sortedIncoming = useMemo(() => {
+    return [...incoming].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  }, [incoming]);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState<ContactFormState>({
-    name: "",
-    phone: "",
-    email: "",
-  });
-
-  const headerSubtitle = useMemo(() => {
-    if (!inShareMode) return "Manage trusted contacts for sharing and emergency.";
-    return "Choose a trusted contact to share your live location.";
-  }, [inShareMode]);
-
-  const { isGuest } = useAuth();
-  const guestAtLimit = isGuest && contacts.length >= 1;
-
-
-  async function onCreateContact() {
+  async function onToggleShare(c: TrustedContact) {
     try {
-      const created = await addContact({
-        name: form.name,
-        phone: form.phone || undefined,
-        email: form.email || undefined,
-      });
+      await setShareEnabled(c.userId, !c.shareEnabled);
+    } catch (e: any) {
+      Alert.alert("Could not update sharing", e?.message ?? "Try again.");
+    }
+  }
 
-      setForm({ name: "", phone: "", email: "" });
-      setModalOpen(false);
+  async function onAddByEmail() {
+    const e = email.trim().toLowerCase();
+    if (!e) return;
 
-      if (inShareMode) {
-        Alert.alert("Contact added", `Now share your location with ${created.name}.`);
+    setBusy(true);
+    try {
+      const lookup = await lookupUserByEmail(e);
+
+      if (!lookup.exists) {
+        Alert.alert("Not found", "That email is not registered yet.");
+        return;
       }
-    } catch (e: any) {
-      Alert.alert("Could not add contact", e?.message ?? "Please try again.");
+
+      if ("isSelf" in lookup && lookup.isSelf) {
+        Alert.alert("That’s you", "You can’t add yourself.");
+        return;
+      }
+
+      await sendTrustRequest(lookup.userId);
+      setEmail("");
+      Alert.alert("Request sent", `Trust request sent to ${lookup.email}.`);
+    } catch (e2: any) {
+      Alert.alert("Could not send request", e2?.message ?? "Try again.");
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function onShare(contactId: string) {
-    if (!canShare) return;
-
-    const contact = contacts.find((c) => c.id === contactId);
-    if (!contact) return;
-
-    // ✅ If already sharing, don't pretend we "started" it again
-    const existing = getActiveShareByContactId(contactId);
-    if (existing) {
-      Alert.alert(
-        "Already sharing",
-        `Live location sharing is already active for ${contact.name}.`,
-        [
-          { text: "Stay here", style: "cancel" },
-          { text: "View Shares", onPress: () => router.push("/shares") },
-        ]
-      );
-      return;
-    }
-
+  async function onAccept(id: string) {
+    setBusy(true);
     try {
-      await createShareForContact(contact);
-
-      Alert.alert(
-        "Sharing started",
-        `Live location sharing is now active for ${contact.name}.`,
-        [
-          { text: "Stay here", style: "cancel" },
-          { text: "View Shares", onPress: () => router.push("/shares") },
-        ]
-      );
+      await acceptRequest(id);
+      Alert.alert("Accepted", "You are now trusted.");
     } catch (e: any) {
-      Alert.alert("Could not start sharing", e?.message ?? "Please try again.");
+      Alert.alert("Could not accept", e?.message ?? "Try again.");
+    } finally {
+      setBusy(false);
     }
   }
 
-
-  async function onStopShare(contactId: string) {
-    const activeShare = getActiveShareByContactId(contactId);
-    if (!activeShare) return;
-
-    const activeBefore = getActiveShares();
-
-    const willStopEmergency = shouldStopEmergencyAfterEndingShare({
-      mode,
-      endingShare: activeShare,
-      activeShares: activeBefore,
-    });
-
-    await endShare(activeShare.id);
-
-    if (willStopEmergency) stopEmergency();
-  }
-
-  async function onDeleteContact(contactId: string) {
-    const ok = await confirm(
-      "Remove contact?",
-      "This removes the trusted contact from your list.",
-      "Remove",
-      "Cancel"
-    );
-    if (!ok) return;
-
-    const activeShare = getActiveShareByContactId(contactId);
-    if (activeShare) {
-      const activeBefore = getActiveShares();
-
-      const willStopEmergency = shouldStopEmergencyAfterEndingShare({
-        mode,
-        endingShare: activeShare,
-        activeShares: activeBefore,
-      });
-
-      await endShare(activeShare.id);
-
-      if (willStopEmergency) stopEmergency();
+  async function onDeny(id: string) {
+    setBusy(true);
+    try {
+      await denyRequest(id);
+    } catch (e: any) {
+      Alert.alert("Could not deny", e?.message ?? "Try again.");
+    } finally {
+      setBusy(false);
     }
-
-    await removeContact(contactId);
   }
 
   return (
@@ -167,156 +115,144 @@ export default function ContactsScreen() {
       <View style={styles.container}>
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Contacts</Text>
-            <Text style={styles.subtitle}>{headerSubtitle}</Text>
-
-            {guestAtLimit && (
-              <Text style={[styles.subtitle, { marginTop: 6 }]}>
-                Guest mode can only have 1 trusted contact. Create an account to add more.
-              </Text>
-            )}
+            <Text style={styles.title}>Trusted</Text>
+            <Text style={styles.subtitle}>
+              Control who can see you when you’re live. Trust + visibility + presence.
+            </Text>
           </View>
 
-          <Pressable
-            onPress={() => setModalOpen(true)}
-            disabled={guestAtLimit}
-            style={[styles.addBtn, guestAtLimit && { opacity: 0.45 }]}
-          >
-            <Text style={styles.addBtnText}>+ Add</Text>
+          <Pressable onPress={refetch} style={styles.refreshBtn} disabled={busy}>
+            <Text style={styles.refreshBtnText}>{busy ? "…" : "Refresh"}</Text>
           </Pressable>
         </View>
 
+        {errorMsg ? (
+          <View style={styles.bannerDanger}>
+            <Text style={styles.bannerDangerText}>{errorMsg}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Trusted Contacts</Text>
+          <Text style={styles.cardTitle}>Add registered user</Text>
+          <Text style={styles.bodyText}>
+            Enter an email to send a trust request. They must accept it.
+          </Text>
 
-          {!isLoaded ? (
-            <Text style={styles.bodyText}>Loading contacts…</Text>
-          ) : contacts.length === 0 ? (
-            <Text style={styles.bodyText}>
-              No contacts yet. Add one to start sharing your live location.
-            </Text>
+          <View style={styles.addRow}>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="name@email.com"
+              placeholderTextColor="#5f6b86"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.input}
+            />
+            <Pressable
+              onPress={onAddByEmail}
+              disabled={busy || !email.trim()}
+              style={[styles.addBtn, (busy || !email.trim()) && { opacity: 0.55 }]}
+            >
+              <Text style={styles.addBtnText}>Send</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Incoming requests</Text>
+            <Text style={styles.pill}>{sortedIncoming.length}</Text>
+          </View>
+
+          {isLoading ? (
+            <View style={{ marginTop: 12 }}>
+              <ActivityIndicator />
+              <Text style={styles.bodyText}>Loading…</Text>
+            </View>
+          ) : sortedIncoming.length === 0 ? (
+            <Text style={styles.bodyText}>No incoming requests.</Text>
           ) : (
             <FlatList
-              data={contacts}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ gap: 12, paddingTop: 12 }}
-              renderItem={({ item }) => {
-                const active = getActiveShareByContactId(item.id);
-
-                return (
-                  <View style={styles.row}>
-                    <View style={{ flex: 1, gap: 4 }}>
-                      <View style={styles.rowTop}>
-                        <Text style={styles.contactName}>{item.name}</Text>
-                        {active ? (
-                          <View style={styles.sharingPill}>
-                            <Text style={styles.sharingPillText}>SHARING</Text>
-                          </View>
-                        ) : null}
-                      </View>
-
-                      <Text style={styles.contactMeta}>
-                        {item.phone ? item.phone : "No phone"}
-                        {item.email ? ` • ${item.email}` : ""}
-                      </Text>
-                    </View>
-
-                    <View style={styles.rowActions}>
-                      {!active ? (
-                        <Pressable
-                          onPress={() => onShare(item.id)}
-                          disabled={!canShare}
-                          style={[
-                            styles.smallBtn,
-                            styles.smallBtnPrimary,
-                            !canShare && styles.btnDisabled,
-                          ]}
-                        >
-                          <Text style={styles.smallBtnPrimaryText}>
-                            Share Location Link
-                          </Text>
-                        </Pressable>
-                      ) : (
-                        <Pressable
-                          onPress={() => onStopShare(item.id)}
-                          style={[styles.smallBtn, styles.smallBtnDanger]}
-                        >
-                          <Text style={styles.smallBtnDangerText}>Stop</Text>
-                        </Pressable>
-                      )}
-
-                      <Pressable
-                        onPress={() => onDeleteContact(item.id)}
-                        style={[styles.smallBtn, styles.smallBtnGhost]}
-                      >
-                        <Text style={styles.smallBtnGhostText}>Remove</Text>
-                      </Pressable>
-                    </View>
+              data={sortedIncoming}
+              keyExtractor={(it) => it.id}
+              contentContainerStyle={{ gap: 10, paddingTop: 12 }}
+              renderItem={({ item }) => (
+                <View style={styles.row}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>Request</Text>
+                    <Text style={styles.rowMeta}>From: {item.requester_user_id}</Text>
                   </View>
-                );
-              }}
+
+                  <View style={styles.rowActions}>
+                    <Pressable
+                      onPress={() => onAccept(item.id)}
+                      disabled={busy}
+                      style={[styles.smallBtn, styles.smallBtnOk, busy && { opacity: 0.55 }]}
+                    >
+                      <Text style={styles.smallBtnOkText}>Accept</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => onDeny(item.id)}
+                      disabled={busy}
+                      style={[styles.smallBtn, styles.smallBtnDanger, busy && { opacity: 0.55 }]}
+                    >
+                      <Text style={styles.smallBtnDangerText}>Deny</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
             />
           )}
         </View>
 
-        <Modal
-          transparent
-          animationType="fade"
-          visible={modalOpen}
-          onRequestClose={() => setModalOpen(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Add Trusted Contact</Text>
-
-              <Text style={styles.label}>Name</Text>
-              <TextInput
-                value={form.name}
-                onChangeText={(t) => setForm((p) => ({ ...p, name: t }))}
-                placeholder="Full name"
-                placeholderTextColor="#5f6b86"
-                style={styles.input}
-              />
-
-              <Text style={styles.label}>Phone (optional)</Text>
-              <TextInput
-                value={form.phone}
-                onChangeText={(t) => setForm((p) => ({ ...p, phone: t }))}
-                placeholder="(555) 555-5555"
-                placeholderTextColor="#5f6b86"
-                style={styles.input}
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.label}>Email (optional)</Text>
-              <TextInput
-                value={form.email}
-                onChangeText={(t) => setForm((p) => ({ ...p, email: t }))}
-                placeholder="name@email.com"
-                placeholderTextColor="#5f6b86"
-                style={styles.input}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-
-              <View style={styles.modalActions}>
-                <Pressable
-                  onPress={() => setModalOpen(false)}
-                  style={[styles.modalBtn, styles.modalBtnGhost]}
-                >
-                  <Text style={styles.modalBtnGhostText}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  onPress={onCreateContact}
-                  style={[styles.modalBtn, styles.modalBtnPrimary]}
-                >
-                  <Text style={styles.modalBtnPrimaryText}>Save</Text>
-                </Pressable>
-              </View>
-            </View>
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Accepted contacts</Text>
+            <Text style={styles.pill}>{contacts.length}</Text>
           </View>
-        </Modal>
+
+          {isLoading ? (
+            <View style={{ marginTop: 12 }}>
+              <ActivityIndicator />
+              <Text style={styles.bodyText}>Loading…</Text>
+            </View>
+          ) : contacts.length === 0 ? (
+            <Text style={styles.bodyText}>
+              No trusted contacts yet. Add someone by email above.
+            </Text>
+          ) : (
+            <FlatList
+              data={contacts}
+              keyExtractor={(it) => it.userId}
+              contentContainerStyle={{ gap: 10, paddingTop: 12 }}
+              renderItem={({ item }) => (
+                <View style={styles.row}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text style={styles.rowTitle}>{item.displayName ?? item.email}</Text>
+                    <Text style={styles.rowMeta}>{item.email}</Text>
+                  </View>
+
+                  <Pressable
+                    onPress={() => onToggleShare(item)}
+                    style={styles.toggleWrap}
+                    disabled={busy}
+                  >
+                    <Toggle value={item.shareEnabled} />
+                    <Text style={styles.toggleLabel}>
+                      {item.shareEnabled ? "Sharing" : "Hidden"}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            />
+          )}
+        </View>
+
+        <Text style={styles.footerHint}>
+          Tip: For live markers to appear, both sides must be trusted, visibility enabled, and the
+          other person must have pinged within ~90 seconds.
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -330,9 +266,7 @@ const styles = StyleSheet.create({
   title: { color: "#fff", fontSize: 22, fontWeight: "900" },
   subtitle: { color: MUTED, fontSize: 13, marginTop: 4 },
 
-  btnDisabled: { opacity: 0.45 },
-
-  addBtn: {
+  refreshBtn: {
     borderWidth: 1,
     borderColor: ACCENT,
     backgroundColor: "rgba(56,150,255,0.16)",
@@ -340,7 +274,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 14,
   },
-  addBtnText: { color: "#fff", fontWeight: "900", fontSize: 13 },
+  refreshBtnText: { color: "#fff", fontWeight: "900", fontSize: 13 },
+
+  bannerDanger: {
+    borderWidth: 1,
+    borderColor: "rgba(255,75,92,0.45)",
+    backgroundColor: "rgba(255,75,92,0.12)",
+    borderRadius: 14,
+    padding: 12,
+  },
+  bannerDangerText: { color: "#fff", fontWeight: "800" },
 
   card: {
     backgroundColor: CARD_BG,
@@ -349,79 +292,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
   },
+  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cardTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  pill: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+
   bodyText: { color: MUTED, fontSize: 13, marginTop: 10, lineHeight: 18 },
 
-  row: {
-    backgroundColor: "rgba(255,255,255,0.02)",
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderRadius: 16,
-    padding: 12,
-    gap: 10,
-  },
-  rowTop: { flexDirection: "row", alignItems: "center", gap: 10 },
-  contactName: { color: "#fff", fontWeight: "900", fontSize: 14 },
-  contactMeta: { color: MUTED, fontSize: 12 },
-
-  sharingPill: {
-    borderWidth: 1,
-    borderColor: "rgba(56,150,255,0.5)",
-    backgroundColor: "rgba(56,150,255,0.14)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  sharingPillText: { color: "#fff", fontSize: 11, fontWeight: "900" },
-
-  rowActions: { gap: 8 },
-
-  smallBtn: {
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-  },
-  smallBtnPrimary: {
-    borderColor: ACCENT,
-    backgroundColor: "rgba(56,150,255,0.16)",
-  },
-  smallBtnPrimaryText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-
-  smallBtnDanger: {
-    borderColor: DANGER,
-    backgroundColor: "rgba(255,75,92,0.16)",
-  },
-  smallBtnDangerText: { color: "#fff", fontSize: 12, fontWeight: "900" },
-
-  smallBtnGhost: { borderColor: BORDER, backgroundColor: "transparent" },
-  smallBtnGhostText: { color: MUTED, fontSize: 12, fontWeight: "800" },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 18,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 520,
-    backgroundColor: CARD_BG,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: BORDER,
-    padding: 16,
-    gap: 10,
-  },
-  modalTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "900",
-    marginBottom: 4,
-  },
-  label: { color: MUTED, fontSize: 12, fontWeight: "800" },
+  addRow: { flexDirection: "row", gap: 10, marginTop: 12 },
   input: {
+    flex: 1,
     borderWidth: 1,
     borderColor: BORDER,
     borderRadius: 14,
@@ -430,23 +319,68 @@ const styles = StyleSheet.create({
     color: "#fff",
     backgroundColor: "rgba(255,255,255,0.03)",
   },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 10,
-    marginTop: 8,
-  },
-  modalBtn: {
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+  addBtn: {
     borderWidth: 1,
-  },
-  modalBtnGhost: { borderColor: BORDER, backgroundColor: "transparent" },
-  modalBtnGhostText: { color: MUTED, fontWeight: "900" },
-  modalBtnPrimary: {
     borderColor: ACCENT,
     backgroundColor: "rgba(56,150,255,0.16)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  modalBtnPrimaryText: { color: "#fff", fontWeight: "900" },
+  addBtnText: { color: "#fff", fontWeight: "900" },
+
+  row: {
+    marginTop: 12,
+    backgroundColor: "rgba(255,255,255,0.02)",
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  rowTitle: { color: "#fff", fontWeight: "900", fontSize: 14 },
+  rowMeta: { color: MUTED, fontSize: 12 },
+
+  rowActions: { flexDirection: "row", gap: 8 },
+
+  smallBtn: {
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+  },
+  smallBtnOk: { borderColor: OK, backgroundColor: "rgba(52,211,153,0.14)" },
+  smallBtnOkText: { color: "#fff", fontSize: 12, fontWeight: "900" },
+
+  smallBtnDanger: { borderColor: DANGER, backgroundColor: "rgba(255,75,92,0.14)" },
+  smallBtnDangerText: { color: "#fff", fontSize: 12, fontWeight: "900" },
+
+  toggleWrap: { alignItems: "flex-end", gap: 8 },
+  toggleLabel: { color: MUTED, fontSize: 12, fontWeight: "800" },
+
+  toggle: {
+    width: 52,
+    height: 30,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: BORDER,
+    padding: 3,
+    justifyContent: "center",
+  },
+  toggleOn: { backgroundColor: "rgba(56,150,255,0.20)", borderColor: "rgba(56,150,255,0.6)" },
+  toggleOff: { backgroundColor: "rgba(255,255,255,0.02)" },
+  toggleKnob: {
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    backgroundColor: "#fff",
+  },
+  toggleKnobOn: { alignSelf: "flex-end" },
+  toggleKnobOff: { alignSelf: "flex-start", opacity: 0.75 },
+
+  footerHint: { color: MUTED, fontSize: 12, lineHeight: 16, marginTop: 6 },
 });

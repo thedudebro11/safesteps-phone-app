@@ -12,19 +12,11 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 function RootNavigator() {
-  const { isAuthLoaded, hasSession, guestMode, isAuthenticated } = useAuth();
+  const { isAuthenticated, isAuthActionLoading, session } = useAuth();
   const segments = useSegments();
 
-  if (!isAuthLoaded) {
-    return (
-      <View style={styles.splash}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
-
-  const authSettling = guestMode || isAuthenticated;
-  if (!hasSession && authSettling) {
+  // During initial hydration or any auth action, show splash
+  if (isAuthActionLoading) {
     return (
       <View style={styles.splash}>
         <ActivityIndicator />
@@ -34,13 +26,19 @@ function RootNavigator() {
 
   const inAuthGroup = segments[0] === "(auth)";
 
-  if (!hasSession && !inAuthGroup) {
+  // Not signed in -> force auth group
+  if (!isAuthenticated && !inAuthGroup) {
     return <Redirect href="/(auth)/login" />;
   }
 
-  if (hasSession && inAuthGroup) {
+  // Signed in -> keep them out of auth group
+  if (isAuthenticated && inAuthGroup) {
     return <Redirect href="/(tabs)/home" />;
   }
+
+  // Optional: extra safety (session should exist if authenticated)
+  // If you ever want: if (!session && isAuthenticated) show splash.
+  void session;
 
   return <Slot />;
 }

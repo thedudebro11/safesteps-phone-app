@@ -106,3 +106,42 @@ Format: Maintain **[Unreleased]**, cut releases when versions are tagged.
 
 
 - Fix: stopping Active Tracking now ends live share sessions (prevents Contacts showing SHARING after tracking stops)
+
+
+
+## [V1 Milestone] - Live Visibility System Complete
+
+### Added
+- Authenticated live presence system (Supabase JWT validated)
+- Bidirectional trust + visibility controls
+- Expiring live_presence model (90s TTL)
+- Secure /api/live/visible endpoint
+- In-app live polling (5s interval)
+- Dual-account automated integration test
+- REQUIRE_AUTH hardened production mode
+
+### Security
+- Bearer token required for all visibility endpoints
+- No guest live visibility
+- Visibility is owner-controlled per trusted user
+
+Status: Stable
+
+## 2026-02-22 — Milestone: Authenticated Live Visibility (V1)
+
+### Added
+- Trusted contacts system (request/accept/deny + list)
+- Visibility permissions per trusted contact (owner -> viewer)
+- Live presence storage with expiry window (~90s)
+- Live visibility endpoint filtered by trust + visibility + expiry
+- Trusted UI (add by email, incoming requests, instant toggles)
+- Map polling for /api/live/visible to show contacts live in-app
+- Automated dual-account integration test script
+
+### Changed
+- AuthProvider contract + routing gates updated
+- Tracking now posts authed location updates to server when logged in
+
+### Security
+- REQUIRE_AUTH=true support (Supabase JWT validation)
+- Server-side enforcement of trust + visibility rules (client cannot bypass)
