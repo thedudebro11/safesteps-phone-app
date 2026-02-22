@@ -1,9 +1,3 @@
-Below is a **single, updated “source of truth” master spec** for SafeSteps V1 that matches the **latest UI/UX you locked in** (Home + Contacts + Shares + History + Settings), along with **philosophy, tiers, security model, app structure, and build order**.
-
-You can paste this directly into `SAFESTEPS_MASTER_SUMMARY.MD` and then split pieces into supporting docs.
-
----
-
 # SafeSteps — Master Summary (V1 Scope, UX/UI Locked)
 
 ## 1. Vision
@@ -680,3 +674,140 @@ When tracking mode transitions to **Active** or **Emergency**:
 - Map behavior is gated by tracking mode:
   ```ts
   const allowMapLocation = mode === "active" || mode === "emergency";
+
+
+Lume (SafeSteps) — Live System Architecture
+Overview
+
+Live tracking in Lume is governed by a 3-layer permission model:
+
+Trust — Users must accept each other as trusted contacts.
+
+Visibility — A user must explicitly allow another user to see them.
+
+Presence — A user must actively be live (TTL-based).
+
+A live marker appears only when:
+
+Trusted AND Visibility Enabled AND Presence Active
+Database Tables
+profiles
+
+Stores user metadata.
+
+user_id
+
+email
+
+display_name
+
+trusted_contacts
+
+Directional trust relationships.
+
+requester_user_id
+
+requested_user_id
+
+status: pending | accepted | denied
+
+reciprocal accepted rows created automatically
+
+live_visibility
+
+Directional visibility control.
+
+owner_user_id
+
+viewer_user_id
+
+can_view (boolean)
+
+Owner controls who can see them.
+
+live_presence
+
+Ephemeral live state.
+
+user_id
+
+lat
+
+lng
+
+accuracy_m
+
+mode (active | emergency)
+
+updated_at
+
+expires_at
+
+Presence expires automatically via TTL logic.
+
+Server Architecture
+Supabase Clients
+
+supabaseAdmin (service role, bypasses RLS)
+
+supabaseAuth (verifies JWT via anon key)
+
+RLS is not relied upon for enforcement.
+Server acts as the gatekeeper.
+
+Routes
+Trust
+
+POST /api/trust/request
+
+GET /api/trust/requests/incoming
+
+POST /api/trust/requests/:id/accept
+
+POST /api/trust/requests/:id/deny
+
+Visibility
+
+POST /api/visibility/set
+
+Live
+
+POST /api/locations
+
+POST /api/emergency
+
+GET /api/live/visible
+
+Live Logic
+
+/api/live/visible returns users only if:
+
+live_presence.expires_at > now
+
+live_visibility.can_view = true (owner → viewer)
+
+trusted_contacts accepted relationship exists
+
+TTL Behavior
+
+Presence TTL: ~90 seconds
+
+If no ping received before expiry → user disappears
+
+Prevents stale markers
+
+Reduces ghost tracking
+
+Current State
+
+Backend permission model verified via:
+
+PowerShell testing
+
+Multi-device testing
+
+Expiration tests
+
+Directional visibility tests
+
+System is stable and functioning as intended.

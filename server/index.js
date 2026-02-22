@@ -1,10 +1,35 @@
 // server/index.js
+
+
+
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+console.log("[env]", {
+  SUPABASE_URL: !!process.env.SUPABASE_URL,
+  SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+});
+
 const express = require("express");
 const cors = require("cors");
+const { supabaseAdmin, supabaseAuth } = require("./lib/supabaseAdmin");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+const { usersRouter } = require("./routes/users");
+
+
+const { trustRouter } = require("./routes/trust");
+const { visibilityRouter } = require("./routes/visibility");
+const { liveRouter } = require("./routes/live");
+
+app.use("/api/users", usersRouter);
+app.use("/api/trust", trustRouter);
+app.use("/api/visibility", visibilityRouter);
+app.use("/api/live", liveRouter);
+
+
 
 // Set REQUIRE_AUTH=true if you want to force auth even in dev.
 const REQUIRE_AUTH = String(process.env.REQUIRE_AUTH || "").toLowerCase() === "true";
@@ -76,6 +101,38 @@ function requireGuestShare(req, res, { minSeconds }) {
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
+async function getUserIdFromBearer(req) {
+  const auth = (req.headers.authorization || "").trim();
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return null;
+
+  const { data, error } = await supabaseAuth.auth.getUser(token);
+  if (error || !data?.user?.id) return null;
+
+  return data.user.id;
+}
+
+async function upsertLivePresence({ userId, lat, lng, accuracyM, mode }) {
+  const nowIso = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 90_000).toISOString();
+
+  const { error } = await supabaseAdmin.from("live_presence").upsert(
+    {
+      user_id: userId,
+      lat,
+      lng,
+      accuracy_m: accuracyM ?? null,
+      mode,
+      updated_at: nowIso,
+      expires_at: expiresAt,
+    },
+    { onConflict: "user_id" }
+  );
+
+  if (error) throw new Error(error.message);
+}
+
+
 /**
  * Register a share token as "live".
  * Client should call this right after createShareForContact() creates a token.
@@ -117,20 +174,53 @@ app.post("/api/shares/:token/block", (req, res) => {
   return res.json({ ok: true, share: blocked });
 });
 
-app.post("/api/locations", (req, res) => {
-  const gate = requireGuestShare(req, res, { minSeconds: 60 });
-  if (!gate || gate.ok !== true) return; // response already sent
+app.post("/api/locations", async (req, res) => {
+  const auth = getAuthHeader(req);
 
-  // Minimal dev response
+  // Authed path: write live_presence
+  if (auth && auth.startsWith("Bearer ")) {
+    const userId = await getUserIdFromBearer(req);
+    if (!userId) return res.status(401).json({ error: "Invalid token" });
+
+    const { lat, lng, accuracyM } = req.body || {};
+    if (typeof lat !== "number" || typeof lng !== "number") {
+      return res.status(400).json({ error: "lat/lng required" });
+    }
+
+    await upsertLivePresence({ userId, lat, lng, accuracyM, mode: "active" });
+    return res.status(200).json({ ok: true, accepted: true, mode: "authed" });
+  }
+
+  // Guest path (existing behavior)
+  const gate = requireGuestShare(req, res, { minSeconds: 60 });
+  if (!gate || gate.ok !== true) return;
+
   return res.status(200).json({ ok: true, accepted: true, mode: gate.mode });
 });
 
-app.post("/api/emergency", (req, res) => {
+
+app.post("/api/emergency", async (req, res) => {
+  const auth = getAuthHeader(req);
+
+  if (auth && auth.startsWith("Bearer ")) {
+    const userId = await getUserIdFromBearer(req);
+    if (!userId) return res.status(401).json({ error: "Invalid token" });
+
+    const { lat, lng, accuracyM } = req.body || {};
+    if (typeof lat !== "number" || typeof lng !== "number") {
+      return res.status(400).json({ error: "lat/lng required" });
+    }
+
+    await upsertLivePresence({ userId, lat, lng, accuracyM, mode: "emergency" });
+    return res.status(200).json({ ok: true, accepted: true, mode: "authed" });
+  }
+
   const gate = requireGuestShare(req, res, { minSeconds: 30 });
   if (!gate || gate.ok !== true) return;
 
   return res.status(200).json({ ok: true, accepted: true, mode: gate.mode });
 });
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

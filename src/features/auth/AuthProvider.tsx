@@ -126,6 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(session ?? null);
         setUser(session?.user ?? null);
+        console.log("ACCESS_TOKEN", session?.access_token);
+
 
         if (session?.user) {
           void ensureProfileRow(session.user);
