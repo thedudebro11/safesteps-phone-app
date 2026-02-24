@@ -14,7 +14,7 @@ const SUPABASE_URL = mustEnv("SUPABASE_URL");
 const SUPABASE_ANON_KEY = mustEnv("SUPABASE_ANON_KEY");
 
 // Use one account for history testing
-const EMAIL = mustEnv("TEST_A_EMAIL");
+const EMAIL = mustEnv("ACCOUNT_A_EMAIL");
 const PASSWORD = mustEnv("TEST_A_PASSWORD");
 
 console.log("Lume / SafeSteps — History Test");

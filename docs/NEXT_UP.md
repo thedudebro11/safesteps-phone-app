@@ -45,11 +45,15 @@ Goal: Implement location history so users can review past pings/events in-app.
 - History test script exists (logs in, posts pings, fetches history)
 - Next code step: server route + server writes are being finalized
 
-## Next implementation steps (same pattern as Live)
-1) Server: finalize history write on:
-   - POST /api/locations (active)
-   - POST /api/emergency (emergency)
-2) Server: add GET /api/history?from=&to=&mode=
-3) Frontend: `useHistory()` hook (auth header via apiClient)
-4) UI: History tab wired to hook
-5) Re-run `npm run history:test` + verify UI matches response
+# Next Up: History (V1)
+
+Status:
+- ✅ Supabase table created: `public.location_history`
+- ✅ Server writes history events from `/api/locations` + `/api/emergency`
+- ✅ GET `/api/history` endpoint supports `from`, `to`, `mode`
+- ✅ History UI screen scaffolding added (`app/(tabs)/history.tsx`)
+- ✅ History test script exists (`scripts/history-test.mjs`)
+
+Critical setup note:
+- Server requires `SUPABASE_SERVICE_ROLE_KEY` in `server/.env` to insert history rows.
+- Scripts use `.env.local` (root). Server uses `server/.env`.

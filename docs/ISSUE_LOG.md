@@ -702,3 +702,21 @@ Confirm:
 share session(s) become status: "ended"
 
 UI immediately stops showing “sharing”
+
+
+## Server won’t start: "Missing SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY"
+
+Cause:
+- `npm run api` loads `server/.env`, not `.env.local`.
+- The server needs **SUPABASE_SERVICE_ROLE_KEY** to write to Supabase tables.
+
+Fix:
+1) Open `server/.env`
+2) Add:
+   - SUPABASE_URL=...
+   - SUPABASE_ANON_KEY=...
+   - SUPABASE_SERVICE_ROLE_KEY=...
+3) Restart server: `npm run api`
+
+Notes:
+- `.env.local` is for app + scripts, NOT the server.
