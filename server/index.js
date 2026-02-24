@@ -1,30 +1,29 @@
 // server/index.js
-const { historyRouter } = require("./routes/history");
-const { insertHistoryEvent } = require("./lib/history");
-
-
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
+const { historyRouter } = require("./routes/history");
+const { insertHistoryEvent } = require("./lib/history");
+const { usersRouter } = require("./routes/users");
+const { trustRouter } = require("./routes/trust");
+const { visibilityRouter } = require("./routes/visibility");
+const { liveRouter } = require("./routes/live");
+const express = require("express");
+const cors = require("cors");
+const { supabaseAdmin, supabaseAuth } = require("./lib/supabaseAdmin");
+const app = express();
+
 console.log("[env]", {
   SUPABASE_URL: !!process.env.SUPABASE_URL,
   SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
 });
 
-const express = require("express");
-const cors = require("cors");
-const { supabaseAdmin, supabaseAuth } = require("./lib/supabaseAdmin");
 
-const app = express();
+
+
+
 app.use(cors());
 app.use(express.json());
-const { usersRouter } = require("./routes/users");
-
-
-const { trustRouter } = require("./routes/trust");
-const { visibilityRouter } = require("./routes/visibility");
-const { liveRouter } = require("./routes/live");
-
 app.use("/api/users", usersRouter);
 app.use("/api/trust", trustRouter);
 app.use("/api/visibility", visibilityRouter);

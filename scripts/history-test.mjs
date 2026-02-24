@@ -1,7 +1,10 @@
 // scripts/history-test.mjs
+import path from "node:path";
 import dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
 import { createClient } from "@supabase/supabase-js";
+
+// Always load root .env.local no matter where you run from
+dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 
 function mustEnv(k) {
   const v = process.env[k];
@@ -13,9 +16,9 @@ const API_BASE_URL = mustEnv("API_BASE_URL").replace(/\/+$/, "");
 const SUPABASE_URL = mustEnv("SUPABASE_URL");
 const SUPABASE_ANON_KEY = mustEnv("SUPABASE_ANON_KEY");
 
-// Use one account for history testing
+// Use Account A for history testing
 const EMAIL = mustEnv("ACCOUNT_A_EMAIL");
-const PASSWORD = mustEnv("TEST_A_PASSWORD");
+const PASSWORD = mustEnv("ACCOUNT_A_PASSWORD");
 
 console.log("Lume / SafeSteps — History Test");
 console.log("API_BASE_URL:", API_BASE_URL);
@@ -33,8 +36,8 @@ async function login() {
   return { token, userId };
 }
 
-async function api(path, { token, method = "GET", json } = {}) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+async function api(pathname, { token, method = "GET", json } = {}) {
+  const res = await fetch(`${API_BASE_URL}${pathname}`, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -73,37 +76,35 @@ function isoMinusMinutes(min) {
   console.log("token:", token.slice(0, 12) + "..." + token.slice(-8));
 
   console.log("\n=== 2) POST /api/locations (active) ===");
-  const active = await api("/api/locations", {
+  console.log(await api("/api/locations", {
     token,
     method: "POST",
     json: { lat: 32.2226, lng: -110.9747, accuracyM: 12 },
-  });
-  console.log(active);
+  }));
 
   console.log("\n=== 3) POST /api/emergency (emergency) ===");
-  const emergency = await api("/api/emergency", {
+  console.log(await api("/api/emergency", {
     token,
     method: "POST",
     json: { lat: 32.2230, lng: -110.9752, accuracyM: 9 },
-  });
-  console.log(emergency);
+  }));
 
-  // pull last 30 minutes
   const from = isoMinusMinutes(30);
   const to = new Date().toISOString();
 
-  console.log("\n=== 4) GET /api/history (from/to last 30 mins) ===");
-  const histAll = await api(`/api/history?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
-    token,
-  });
-  console.log(JSON.stringify(histAll, null, 2));
+  console.log("\n=== 4) GET /api/history (last 30 mins) ===");
+  console.log(JSON.stringify(
+    await api(`/api/history?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { token }),
+    null,
+    2
+  ));
 
   console.log("\n=== 5) GET /api/history?mode=emergency ===");
-  const histEmergency = await api(
-    `/api/history?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&mode=emergency`,
-    { token }
-  );
-  console.log(JSON.stringify(histEmergency, null, 2));
+  console.log(JSON.stringify(
+    await api(`/api/history?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&mode=emergency`, { token }),
+    null,
+    2
+  ));
 
   console.log("\n✅ Done.");
 })().catch((e) => {

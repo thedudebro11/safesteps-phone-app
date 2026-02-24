@@ -47,3 +47,17 @@ Created `public.location_history` with indexes + RLS:
 
 ### ✅ History test script added
 - `npm run history:test` logs into Supabase via `.env.local`, posts active + emergency pings, then fetches `/api/history` and prints rows.
+
+ Fix: "Missing SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY"
+
+Cause:
+- API reads env from `server/.env`, not `.env.local`.
+- If server/.env lacks SUPABASE_SERVICE_ROLE_KEY (or file not loaded), `server/lib/supabaseAdmin.js` throws immediately.
+
+Fix:
+- Ensure `server/index.js` loads dotenv from `server/.env`
+- Ensure `server/.env` contains:
+  - SUPABASE_URL
+  - SUPABASE_ANON_KEY
+  - SUPABASE_SERVICE_ROLE_KEY
+  - REQUIRE_AUTH=true (recommended)
