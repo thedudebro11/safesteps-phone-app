@@ -15,3 +15,35 @@
 Notes:
 - REQUIRE_AUTH=true supported (real JWT verification via Supabase)
 - Added node test script to validate live visibility deterministically
+
+## 2026-02-22 — Live Visibility Milestone + History Kickoff
+
+### ✅ Live visibility works (authed)
+- Trust list loads
+- Incoming requests: accept/deny works
+- Visibility toggle updates instantly
+- Live pings stored in `live_presence`
+- `/api/live/visible` returns visible users correctly
+- Map UI now shows other user markers in-app
+
+### ✅ REQUIRE_AUTH now enforced
+Server runs with `REQUIRE_AUTH=true` for real token behavior.
+
+### 🔥 Critical fix: server env loading (supabaseAdmin)
+Problem:
+- `npm run api` failed with:
+  "Missing SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY in server/.env"
+
+Cause:
+- Env vars were not available when `server/lib/supabaseAdmin.js` was imported (load-order / dotenv path issues).
+
+Fix:
+- `server/lib/supabaseAdmin.js` now ensures dotenv loads the correct `server/.env` BEFORE reading `process.env`.
+- Confirmed server starts and can access Supabase clients reliably after this.
+
+### ✅ History table created (Supabase)
+Created `public.location_history` with indexes + RLS:
+- RLS: authenticated users can select their own rows.
+
+### ✅ History test script added
+- `npm run history:test` logs into Supabase via `.env.local`, posts active + emergency pings, then fetches `/api/history` and prints rows.

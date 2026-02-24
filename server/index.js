@@ -1,5 +1,6 @@
 // server/index.js
-
+const { historyRouter } = require("./routes/history");
+const { insertHistoryEvent } = require("./lib/history");
 
 
 const path = require("path");
@@ -28,7 +29,7 @@ app.use("/api/users", usersRouter);
 app.use("/api/trust", trustRouter);
 app.use("/api/visibility", visibilityRouter);
 app.use("/api/live", liveRouter);
-
+app.use("/api/history", historyRouter);
 
 
 // Set REQUIRE_AUTH=true if you want to force auth even in dev.
@@ -133,6 +134,7 @@ async function upsertLivePresence({ userId, lat, lng, accuracyM, mode }) {
 }
 
 
+
 /**
  * Register a share token as "live".
  * Client should call this right after createShareForContact() creates a token.
@@ -188,6 +190,7 @@ app.post("/api/locations", async (req, res) => {
     }
 
     await upsertLivePresence({ userId, lat, lng, accuracyM, mode: "active" });
+    await insertHistoryEvent({ userId, lat, lng, accuracyM, mode: "active" });
     return res.status(200).json({ ok: true, accepted: true, mode: "authed" });
   }
 
@@ -212,6 +215,7 @@ app.post("/api/emergency", async (req, res) => {
     }
 
     await upsertLivePresence({ userId, lat, lng, accuracyM, mode: "emergency" });
+    await insertHistoryEvent({ userId, lat, lng, accuracyM, mode: "emergency" });
     return res.status(200).json({ ok: true, accepted: true, mode: "authed" });
   }
 

@@ -36,3 +36,20 @@ Goal: Implement location history so users can review past pings/events in-app.
   - loading/error states
   - pull-to-refresh
   - pagination (optional)
+
+
+  # Next Up: History (V1)
+
+## Current status
+- `location_history` table exists + indexed + RLS enabled
+- History test script exists (logs in, posts pings, fetches history)
+- Next code step: server route + server writes are being finalized
+
+## Next implementation steps (same pattern as Live)
+1) Server: finalize history write on:
+   - POST /api/locations (active)
+   - POST /api/emergency (emergency)
+2) Server: add GET /api/history?from=&to=&mode=
+3) Frontend: `useHistory()` hook (auth header via apiClient)
+4) UI: History tab wired to hook
+5) Re-run `npm run history:test` + verify UI matches response

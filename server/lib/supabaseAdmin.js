@@ -1,5 +1,9 @@
 // server/lib/supabaseAdmin.js
+const path = require("path");
+const dotenv = require("dotenv");
 const { createClient } = require("@supabase/supabase-js");
+// ✅ Always load server/.env even if this module is required before server/index.js runs dotenv
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;

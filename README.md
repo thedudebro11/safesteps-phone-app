@@ -226,3 +226,17 @@ Native persistence (recommended)
 For iOS/Android persistence across app restarts, install AsyncStorage:
 
 npx expo install @react-native-async-storage/async-storage
+
+## Dev scripts
+- `npm run api` — starts the local API server (server/index.js)
+- `npm run start` — Expo app
+- `npm run dev` — runs API + web concurrently
+- `npm run live:test` — automated live visibility test (two-account)
+- `npm run history:test` — posts active+emergency then fetches history
+
+## Server env
+Server reads `server/.env` for:
+- SUPABASE_URL
+- SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY
+- REQUIRE_AUTH=true|false
