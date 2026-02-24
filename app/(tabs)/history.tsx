@@ -3,6 +3,8 @@ import React, { useMemo } from "react";
 import { FlatList, Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { useHistory } from "@/src/features/history/useHistory";
 import type { HistoryModeFilter, HistoryRangePreset } from "@/src/features/history/types";
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 
 const BG = "#050814";
 const CARD_BG = "#0c1020";
@@ -39,6 +41,11 @@ function Pill({
 
 export default function HistoryScreen() {
   const { items, isLoading, error, filters, setRange, setMode, refetch } = useHistory();
+  useFocusEffect(
+  useCallback(() => {
+    refetch();
+  }, [refetch])
+);
 
   const headerText = useMemo(() => {
     if (isLoading) return "Loading history…";
