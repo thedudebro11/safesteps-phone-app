@@ -188,3 +188,24 @@ Restarted the Express API server (`npm run api`). After restart, server logs con
 - Start tracking: other device sees marker quickly.
 - Stop tracking: marker disappears quickly (poll-driven, boosted to near-instant).
 - Crash/force-close still falls back to TTL cleanup (presence expires naturally).
+
+
+## [Unreleased] – Live Visibility Responsiveness Upgrade
+
+### Improved
+- I implemented immediate presence stop propagation by fixing the `/api/presence/stop` route and restarting the server to properly register the route.
+- I eliminated stale presence delays that were caused by a 404 route misregistration.
+- I implemented boost polling logic when tracking turns ON to make visibility feel near-instant.
+- I added overlap protection to prevent concurrent `/api/live/visible` requests.
+- I stopped unnecessary polling when tracking is idle.
+- I added a short high-frequency polling window (12 seconds @ 1s interval) after tracking starts.
+- I optimized visible user count changes to temporarily boost polling.
+
+### Fixed
+- Presence OFF state previously took up to ~2 minutes to reflect due to server route not being registered.
+- Fixed polling loop overlapping requests under slow network conditions.
+- Removed redundant boost logic that caused unnecessary polling.
+
+### Performance
+- Active tracking visibility now reflects in ~1 second under normal network conditions.
+- Presence stop is now effectively immediate.

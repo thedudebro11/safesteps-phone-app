@@ -59,3 +59,25 @@ For `location_pings`:
   ```sql
   CREATE INDEX IF NOT EXISTS idx_location_pings_user_created
   ON public.location_pings (user_id, created_at DESC);
+
+
+## Live Visibility Performance Improvements
+
+I optimized the live presence system to reduce latency and eliminate wasted polling.
+
+### Before
+- Polling ran continuously regardless of tracking state.
+- Presence stop relied on TTL expiration.
+- Overlapping fetch calls were possible.
+- Boost logic could trigger redundantly.
+
+### After
+- Polling is disabled when tracking is idle.
+- Presence stop deletes rows immediately.
+- Overlap protection prevents request stacking.
+- Boost polling runs only during critical windows.
+
+Result:
+- Faster UI responsiveness.
+- Lower network usage.
+- More predictable real-time behavior.

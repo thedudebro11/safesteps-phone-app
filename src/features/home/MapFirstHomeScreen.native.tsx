@@ -53,7 +53,12 @@ export default function MapFirstHomeScreen() {
 
   const accessToken: string | null = session?.access_token ?? null;
   const myUserId: string | null = user?.id ?? null;
+  const prevAllowRef = useRef<boolean>(allowMapLocation);
+  const inFlightRef = useRef(false);
 
+  const [boostPollUntil, setBoostPollUntil] = useState<number>(0);
+
+  const lastCountRef = useRef<number>(0);
   // ✅ When tracking turns on (and we have a fix), center on it.
   useEffect(() => {
     if (!allowMapLocation) return;
@@ -70,8 +75,11 @@ export default function MapFirstHomeScreen() {
     );
   }, [allowMapLocation, lastFix]);
 
+
+
   const fetchVisible = useCallback(async () => {
     // If not authed, don’t poll (trusted live markers are authed-only)
+
     if (!accessToken) {
       setVisibleUsers([]);
       setLastUpdatedIso(null);
@@ -99,7 +107,11 @@ export default function MapFirstHomeScreen() {
 
       // Don’t render myself as an “other” marker (you already have blue-dot)
       const others = myUserId ? users.filter((u) => u.userId !== myUserId) : users;
-
+      const nextCount = others.length;
+      if (nextCount !== lastCountRef.current) {
+        setBoostPollUntil(Date.now() + 12_000);
+        lastCountRef.current = nextCount;
+      }
       setVisibleUsers(others);
       setLastUpdatedIso(new Date().toISOString());
       setErrorMsg(null);
@@ -110,28 +122,25 @@ export default function MapFirstHomeScreen() {
     }
   }, [accessToken, myUserId, API_BASE_URL]);
 
-  const prevModeRef = useRef<typeof mode>(mode);
-
-  const inFlightRef = useRef(false);
-
-  const [boostPollUntil, setBoostPollUntil] = useState<number>(0);
-
 
 
 
   useEffect(() => {
-    const prev = prevModeRef.current;
-    const now = mode;
+    const prev = prevAllowRef.current;
+    const now = allowMapLocation;
 
-    const wasTracking = prev === "active" || prev === "emergency";
-    const isTracking = now === "active" || now === "emergency";
-
-    if (wasTracking !== isTracking) {
+    if (!prev && now) {
+      // tracking just turned ON
       setBoostPollUntil(Date.now() + 12_000);
+      fetchVisible();
     }
 
-    prevModeRef.current = now;
-  }, [mode]);
+    prevAllowRef.current = now;
+  }, [allowMapLocation, fetchVisible]);
+
+
+
+  
 
 
   useFocusEffect(
@@ -141,7 +150,12 @@ export default function MapFirstHomeScreen() {
 
       const tick = async () => {
         if (!alive) return;
-
+        if (!accessToken || !allowMapLocation) {
+          // when idle or signed out, slow/no polling
+          const nextDelay = 5000;
+          t = setTimeout(tick, nextDelay);
+          return;
+        }
         // ✅ prevent overlap
         if (inFlightRef.current) {
           const boosted = Date.now() < boostPollUntil;
@@ -168,7 +182,7 @@ export default function MapFirstHomeScreen() {
         alive = false;
         if (t) clearTimeout(t);
       };
-    }, [fetchVisible, boostPollUntil])
+    }, [fetchVisible, boostPollUntil, accessToken, allowMapLocation])
   );
 
   const statusText = useMemo(() => {

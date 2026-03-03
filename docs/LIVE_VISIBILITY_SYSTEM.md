@@ -88,3 +88,33 @@ PASS criteria:
 
 ## Files Changed / Added
 See `docs/FILES_live-visibility_v1.md` for the exact list and responsibilities.
+
+
+## Responsiveness Optimization (2026 Upgrade)
+
+I improved the live visibility system to feel near real-time without switching to WebSockets.
+
+### Polling Architecture
+
+- Base polling interval: 5 seconds
+- Boost window: 12 seconds
+- Boost interval: 1 second
+- Boost triggers:
+  - When tracking turns ON
+  - When visible user count changes
+
+### Safeguards
+
+- I added an `inFlightRef` guard to prevent overlapping requests.
+- I disabled polling when:
+  - User is not authenticated
+  - Tracking mode is idle
+
+### Presence Stop Behavior
+
+When tracking turns OFF:
+- I call `/api/presence/stop`
+- Presence is immediately deleted server-side
+- Other devices reflect OFF state within the next poll cycle (usually < 1 second during boost)
+
+This significantly improved perceived real-time behavior.

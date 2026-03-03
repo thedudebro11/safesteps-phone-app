@@ -720,3 +720,23 @@ Fix:
 
 Notes:
 - `.env.local` is for app + scripts, NOT the server.
+
+
+## Issue: Slow Presence Stop + Delayed Visibility Updates
+
+### Problem
+When Active Tracking was turned OFF, the other device would continue to show the user as live for up to 2 minutes.
+
+### Root Cause
+The `/api/presence/stop` route was not registered due to a server restart issue, causing 404 errors.
+Presence rows were relying solely on TTL expiration instead of immediate deletion.
+
+### Fix
+- Restarted server to properly register the route.
+- Verified presence deletion via server logs.
+- Implemented immediate stopPresence() call in TrackingProvider.
+- Added polling boost window when tracking turns ON.
+- Prevented overlapping polling requests.
+
+### Result
+Presence ON and OFF now reflect nearly instantly.

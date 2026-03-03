@@ -30,3 +30,8 @@ Expected:
 posts active + emergency
 
 fetches history (all + mode filter)
+
+
+### Live Visibility Evolution
+Originally relied on standard polling and TTL expiration.
+Upgraded to boosted polling + immediate presence deletion for improved responsiveness.

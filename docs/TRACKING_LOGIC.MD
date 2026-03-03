@@ -197,3 +197,21 @@ When tracking is running in `mode="active"`, users may create live share session
 
 Emergency mode remains separate:
 - Emergency can still end shares through the existing emergency/share sync logic when a share ends.
+
+
+## Live Visibility Boost Logic
+
+When tracking transitions from idle → active or emergency:
+
+1. I detect the transition using a previous state ref.
+2. I trigger an immediate fetch of visible users.
+3. I enable a temporary 12-second boost polling window.
+4. During boost, polling runs every 1 second.
+5. After boost expires, polling returns to 5 seconds.
+
+I also added logic to:
+- Reset visible users when authentication is lost.
+- Prevent overlapping network calls.
+- Avoid polling entirely while idle.
+
+This keeps the system efficient while still feeling real-time.

@@ -811,3 +811,5 @@ Expiration tests
 Directional visibility tests
 
 System is stable and functioning as intended.
+
+Recent improvements introduced a hybrid polling model with boost windows to simulate near real-time behavior without requiring WebSockets. Presence ON/OFF now reflects almost instantly.
