@@ -153,6 +153,29 @@ app.post("/api/shares/start", (req, res) => {
   return res.json({ ok: true, share: next });
 });
 
+app.post("/api/presence/stop", requireBearer, async (req, res) => {
+  console.log("✅ presence stop route loaded");
+  console.log("[presence/stop] hit", {
+    hasAuth: !!req.headers.authorization,
+    requireAuth: REQUIRE_AUTH,
+  });
+
+  const auth = getAuthHeader(req);
+  if (!auth || !auth.startsWith("Bearer ")) {
+    console.log("[presence/stop] noop (no bearer)");
+    return res.json({ ok: true, noop: true });
+  }
+
+  const userId = await getUserIdFromBearer(req);
+  console.log("[presence/stop] user", { userId: userId ? "ok" : "null" });
+
+
+  const { error } = await supabaseAdmin.from("live_presence").delete().eq("user_id", userId);
+  console.log("[presence/stop] delete", { ok: !error, error: error?.message });
+
+  return res.json({ ok: true });
+});
+
 app.post("/api/shares/end", (req, res) => {
   const { token } = req.body || {};
   if (!token) return res.status(400).json({ error: "missing_token" });

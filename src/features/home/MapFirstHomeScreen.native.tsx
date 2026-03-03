@@ -108,26 +108,67 @@ export default function MapFirstHomeScreen() {
     } finally {
       setIsFirstLoad(false);
     }
-  }, [accessToken, myUserId]);
+  }, [accessToken, myUserId, API_BASE_URL]);
 
-  // ✅ Poll while this screen is focused
+  const prevModeRef = useRef<typeof mode>(mode);
+
+  const inFlightRef = useRef(false);
+
+  const [boostPollUntil, setBoostPollUntil] = useState<number>(0);
+
+
+
+
+  useEffect(() => {
+    const prev = prevModeRef.current;
+    const now = mode;
+
+    const wasTracking = prev === "active" || prev === "emergency";
+    const isTracking = now === "active" || now === "emergency";
+
+    if (wasTracking !== isTracking) {
+      setBoostPollUntil(Date.now() + 12_000);
+    }
+
+    prevModeRef.current = now;
+  }, [mode]);
+
+
   useFocusEffect(
     useCallback(() => {
       let alive = true;
+      let t: ReturnType<typeof setTimeout> | null = null;
 
-      // immediate fetch on focus
-      fetchVisible();
-
-      const id = setInterval(() => {
+      const tick = async () => {
         if (!alive) return;
-        fetchVisible();
-      }, 5000);
+
+        // ✅ prevent overlap
+        if (inFlightRef.current) {
+          const boosted = Date.now() < boostPollUntil;
+          const nextDelay = boosted ? 1000 : 5000;
+          t = setTimeout(tick, nextDelay);
+          return;
+        }
+
+        inFlightRef.current = true;
+        try {
+          await fetchVisible();
+        } finally {
+          inFlightRef.current = false;
+        }
+
+        const boosted = Date.now() < boostPollUntil;
+        const nextDelay = boosted ? 1000 : 5000;
+        t = setTimeout(tick, nextDelay);
+      };
+
+      tick();
 
       return () => {
         alive = false;
-        clearInterval(id);
+        if (t) clearTimeout(t);
       };
-    }, [fetchVisible])
+    }, [fetchVisible, boostPollUntil])
   );
 
   const statusText = useMemo(() => {

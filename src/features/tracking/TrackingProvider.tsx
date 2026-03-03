@@ -159,6 +159,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     const token = await getAccessTokenSafe();
     if (!token) throw new Error("Missing access token (sign in required)");
 
+
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: "POST",
       headers: {
@@ -232,15 +233,59 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     }, safeFreq * 1000);
   };
 
+  const stopPresence = async () => {
+    if (!API_BASE_URL) {
+      console.warn("[Tracking] stopPresence skipped: missing API_BASE_URL");
+      return;
+    }
+
+    const token = await getAccessTokenSafe();
+    console.log("[Tracking] stopPresence token?", !!token);
+
+    if (!token) {
+      console.warn("[Tracking] stopPresence skipped: no access token");
+      return;
+    }
+
+    try {
+      console.log("[Tracking] stopPresence -> POST /api/presence/stop");
+      const res = await fetch(`${API_BASE_URL}/api/presence/stop`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const text = await res.text().catch(() => "");
+      console.log("[Tracking] stopPresence <-", res.status, text);
+
+      if (!res.ok) {
+        console.warn("[Tracking] stopPresence failed", res.status, text);
+      }
+    } catch (e: any) {
+      console.warn("[Tracking] stopPresence network error", String(e?.message ?? e));
+    }
+  };
+
+
+
   const stopAll = async () => {
+    console.log("[Tracking] stopAll", { modeBefore: mode });
     const prevMode = mode;
+
     stopInterval();
     setMode("idle");
 
     if (prevMode === "active" || prevMode === "emergency") {
+      // ✅ make OFF fast for other devices
+      await stopPresence();
+
+      // keep existing cleanup
       await endAllLiveShares();
     }
   };
+
 
   const startActive = async () => {
     if (mode === "emergency") return;

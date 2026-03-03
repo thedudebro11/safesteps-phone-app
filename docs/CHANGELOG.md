@@ -145,3 +145,46 @@ Status: Stable
 ### Security
 - REQUIRE_AUTH=true support (Supabase JWT validation)
 - Server-side enforcement of trust + visibility rules (client cannot bypass)
+
+## 2026-03-03 — Presence OFF delay fixed (instant stop)
+
+### Problem
+Active Tracking would turn ON quickly, but turning OFF could take up to ~1–2 minutes before other devices stopped showing the user as "live".
+
+### Root Cause
+Presence was effectively TTL-based:
+- `live_presence` rows are upserted with `expires_at = now + 90s`.
+- When tracking stops, if we do not explicitly clear presence, other viewers continue to see the last presence row until it expires.
+
+### Fix Implemented
+1) Added an explicit server endpoint to clear presence immediately:
+- `POST /api/presence/stop`
+- Auth required when `REQUIRE_AUTH=true`
+- Deletes `live_presence` row for the authenticated `user_id`
+
+2) Client now calls stop endpoint whenever tracking stops:
+- `TrackingProvider.stopAll()` calls `stopPresence()` before ending shares
+- This makes OFF idempotent and immediate (deletes derived state)
+
+3) UI responsiveness improvement:
+- Home map uses boosted polling for 12 seconds after tracking mode toggles
+- Poll interval: 1s during boost, 5s normally
+- In-flight guard prevents overlapping fetches
+
+### Debugging Discovery
+Client logs showed stop requests returning:
+- `404 Cannot POST /api/presence/stop`
+
+This proved the app was calling the endpoint correctly, but the running Express server did not have the new route loaded.
+
+### Final Resolution
+Restarted the Express API server (`npm run api`). After restart, server logs confirmed:
+- route loaded
+- requests hit
+- user validated
+- delete executed successfully
+
+### Verification
+- Start tracking: other device sees marker quickly.
+- Stop tracking: marker disappears quickly (poll-driven, boosted to near-instant).
+- Crash/force-close still falls back to TTL cleanup (presence expires naturally).
