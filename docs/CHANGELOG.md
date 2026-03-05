@@ -209,3 +209,84 @@ Restarted the Express API server (`npm run api`). After restart, server logs con
 ### Performance
 - Active tracking visibility now reflects in ~1 second under normal network conditions.
 - Presence stop is now effectively immediate.
+
+
+#### History Tab Not Updating Without Filter Change
+
+I discovered that the History tab would stop updating unless the **Today** filter was clicked again.
+
+Root cause:
+
+The history query string was computed using `useMemo`, which meant the `to` timestamp was frozen until filters changed.
+
+Example problem pattern:
+
+
+useMemo(() => {
+const to = new Date().toISOString()
+}, [filters])
+
+
+This caused refresh requests to repeatedly fetch the same time window.
+
+Fix implemented:
+
+- Moved the `buildRange()` logic inside the fetch function so `to` is recomputed on every request.
+- Added a **silent refresh mode** to prevent UI blinking.
+- Implemented stable `FlatList` keys to prevent row repaint issues.
+
+Result:
+
+- Refresh now fetches the correct time window.
+- The History list updates automatically.
+- UI updates smoothly without the entire screen flashing.
+
+---
+
+### Improved
+
+#### Silent Auto Refresh For History
+
+I added a background refresh system for the History tab.
+
+Behavior:
+
+- History refreshes automatically while the screen is focused.
+- Refresh interval depends on tracking mode.
+
+Intervals:
+
+
+Active / Emergency tracking → 6 seconds
+Idle mode → 30 seconds
+
+
+Refresh uses a **silent fetch** so loading states are not triggered during polling.
+
+This prevents the UI from blinking while still keeping the event log up to date.
+
+
+refetch({ silent: true })
+
+
+Manual refresh still performs a full reload.
+
+---
+
+### UI Improvements
+
+#### Stable FlatList Keys
+
+History entries now use stable keys to prevent row flicker:
+
+
+keyExtractor={(it) => String(it.id)}
+
+
+Fallback key protection was also added for safety.
+
+Result:
+
+- smoother scrolling
+- no row swapping
+- consistent rendering

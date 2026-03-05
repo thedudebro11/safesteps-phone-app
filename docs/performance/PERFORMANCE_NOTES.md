@@ -81,3 +81,62 @@ Result:
 - Faster UI responsiveness.
 - Lower network usage.
 - More predictable real-time behavior.
+
+## Silent Background Refresh
+
+Some screens display live event data such as:
+
+- location history
+- presence lists
+- trusted contacts activity
+
+To prevent UI flicker, background polling must **never trigger loading states**.
+
+Instead, the system uses **silent refreshes**.
+
+Example:
+
+
+refetch({ silent: true })
+
+
+Silent refresh rules:
+
+1. Do not set loading indicators
+2. Do not clear existing data
+3. Merge or replace results in place
+4. Maintain stable list keys
+
+This allows the UI to update smoothly while new data arrives.
+
+---
+
+## Overlap Protection
+
+Polling requests must never overlap.
+
+Each polling loop uses an in-flight guard:
+
+
+if (inFlightRef.current) return
+
+
+This prevents request pileups and wasted network calls.
+
+---
+
+## Stable List Keys
+
+All FlatList / event feed lists must use stable keys.
+
+Example:
+
+
+keyExtractor={(item) => String(item.id)}
+
+
+Unstable keys cause:
+
+- row flickering
+- incorrect badge states
+- excessive re-rendering

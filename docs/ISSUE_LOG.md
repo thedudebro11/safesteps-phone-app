@@ -740,3 +740,64 @@ Presence rows were relying solely on TTL expiration instead of immediate deletio
 
 ### Result
 Presence ON and OFF now reflect nearly instantly.
+
+# Issue Log
+
+This file records bugs discovered during development and how they were resolved.
+
+---
+
+## Issue: History Tab Stops Updating
+
+Date discovered: March 2026
+
+### Symptoms
+
+History entries would stop updating unless the user tapped the **Today** filter.
+
+Manual refresh sometimes appeared to do nothing.
+
+### Cause
+
+The history API query window used a `to` timestamp generated inside a `useMemo`.
+
+Because the memo only recalculated when filters changed, the `to` timestamp became frozen.
+
+This meant the API repeatedly requested history up to the same timestamp.
+
+Example problematic pattern:
+
+const queryString = useMemo(() => {
+const to = new Date().toISOString()
+}, [filters])
+
+
+### Resulting behavior
+
+New location pings were created in the database, but they were outside the query window.
+
+Therefore the UI never saw them.
+
+### Fix
+
+The time range builder was moved into the fetch function so it executes every request.
+
+
+const { from, to } = buildRange(filters)
+
+
+This ensures the `to` timestamp always reflects the current time.
+
+### Additional Improvements
+
+While fixing the issue I also implemented:
+
+• silent polling refresh  
+• overlap protection for requests  
+• stable FlatList keys  
+
+These changes made the History tab behave more like a real event feed.
+
+### Status
+
+Resolved

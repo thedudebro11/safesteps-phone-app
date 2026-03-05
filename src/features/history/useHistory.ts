@@ -1,5 +1,5 @@
 // src/features/history/useHistory.ts
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/src/lib/apiClient";
 import type {
   HistoryFilters,
@@ -21,20 +21,35 @@ function daysAgoIso(days: number) {
 
 function buildRange(filters: HistoryFilters) {
   const to = new Date().toISOString();
-
   let from: string;
   if (filters.range === "today") from = startOfTodayIso();
   else if (filters.range === "7d") from = daysAgoIso(7);
   else from = daysAgoIso(30);
-
   return { from, to };
 }
 
 type HistoryResponse = { items: HistoryItem[] };
 
+function mergeById(prev: HistoryItem[], next: HistoryItem[]) {
+  // keep newest-first ordering (server already returns newest-first)
+  const map = new Map<string, HistoryItem>();
+  for (const it of prev) map.set(String((it as any).id), it);
+  for (const it of next) map.set(String((it as any).id), it);
+
+  // sort by createdAt desc if present
+  const merged = Array.from(map.values());
+  merged.sort((a: any, b: any) => {
+    const ta = Date.parse(a.createdAt ?? a.created_at ?? "") || 0;
+    const tb = Date.parse(b.createdAt ?? b.created_at ?? "") || 0;
+    return tb - ta;
+  });
+
+  return merged;
+}
+
 export function useHistory() {
   const [items, setItems] = useState<HistoryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);      // for initial/manual loads
   const [error, setError] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<HistoryFilters>({
@@ -42,48 +57,54 @@ export function useHistory() {
     mode: "all",
   });
 
-  const queryString = useMemo(() => {
-    const { from, to } = buildRange(filters);
-    const qs = new URLSearchParams();
-    qs.set("from", from);
-    qs.set("to", to);
-    if (filters.mode !== "all") qs.set("mode", filters.mode);
-    return qs.toString();
-  }, [filters]);
+  const inFlightRef = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
 
-  const fetchHistory = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const fetchHistory = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
 
-    try {
-      const res = await apiFetch<HistoryResponse>(`/api/history?${queryString}`, {
-        method: "GET",
-        auth: true,
-      });
+      const silent = opts?.silent === true;
 
-      setItems(Array.isArray(res?.items) ? res.items : []);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load history");
-      setItems([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [queryString]);
+      // Only show loading UI on first load OR explicit/manual refresh
+      if (!silent) setIsLoading(true);
+      setError(null);
+
+      try {
+        const { from, to } = buildRange(filters);
+        const qs = new URLSearchParams();
+        qs.set("from", from);
+        qs.set("to", to);
+        if (filters.mode !== "all") qs.set("mode", filters.mode);
+
+        const res = await apiFetch<HistoryResponse>(`/api/history?${qs.toString()}`, {
+          method: "GET",
+          auth: true,
+        });
+
+        const next = Array.isArray(res?.items) ? res.items : [];
+
+        setItems((prev) => {
+          // first load or non-silent refresh can replace; silent merges
+          if (!hasLoadedOnceRef.current || !silent) return next;
+          return mergeById(prev, next);
+        });
+
+        hasLoadedOnceRef.current = true;
+      } catch (e: any) {
+        setError(e?.message ?? "Failed to load history");
+        if (!silent) setItems([]);
+      } finally {
+        if (!silent) setIsLoading(false);
+        inFlightRef.current = false;
+      }
+    },
+    [filters]
+  );
 
   useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
-
-  const setRange = useCallback((range: HistoryRangePreset) => {
-    setFilters((p) => ({ ...p, range }));
-  }, []);
-
-  const setMode = useCallback((mode: HistoryModeFilter) => {
-    setFilters((p) => ({ ...p, mode }));
-  }, []);
-
-  const refetch = useCallback(() => {
-    fetchHistory();
+    fetchHistory({ silent: false });
   }, [fetchHistory]);
 
   return {
@@ -91,8 +112,8 @@ export function useHistory() {
     isLoading,
     error,
     filters,
-    setRange,
-    setMode,
-    refetch,
+    setRange: (range: HistoryRangePreset) => setFilters((p) => ({ ...p, range })),
+    setMode: (mode: HistoryModeFilter) => setFilters((p) => ({ ...p, mode })),
+    refetch: fetchHistory, // call refetch({silent:true}) for background updates
   };
 }

@@ -5,6 +5,7 @@ import { useHistory } from "@/src/features/history/useHistory";
 import type { HistoryModeFilter, HistoryRangePreset } from "@/src/features/history/types";
 import { useFocusEffect } from "expo-router";
 import { useCallback } from "react";
+import { useTracking } from "@/src/features/tracking/TrackingProvider";
 
 const BG = "#050814";
 const CARD_BG = "#0c1020";
@@ -41,11 +42,20 @@ function Pill({
 
 export default function HistoryScreen() {
   const { items, isLoading, error, filters, setRange, setMode, refetch } = useHistory();
+  const { mode } = useTracking();
   useFocusEffect(
-  useCallback(() => {
-    refetch();
-  }, [refetch])
-);
+    useCallback(() => {
+      // On focus, do a silent refresh so you don't blink
+      refetch({ silent: true });
+
+      const intervalMs = mode === "idle" ? 30_000 : 6_000;
+      const id = setInterval(() => {
+        refetch({ silent: true });
+      }, intervalMs);
+
+      return () => clearInterval(id);
+    }, [refetch, mode])
+  );
 
   const headerText = useMemo(() => {
     if (isLoading) return "Loading history…";
@@ -76,7 +86,7 @@ export default function HistoryScreen() {
             </Text>
           </View>
 
-          <Pressable onPress={refetch} style={styles.refreshBtn}>
+          <Pressable onPress={() => refetch({ silent: false })} style={styles.refreshBtn}>
             <Text style={styles.refreshText}>Refresh</Text>
           </Pressable>
         </View>
@@ -123,7 +133,7 @@ export default function HistoryScreen() {
           ) : (
             <FlatList
               data={items}
-              keyExtractor={(it) => it.id}
+              keyExtractor={(it) => String(it.id ?? `${it.created_at}-${it.lat}-${it.lng}`)}
               contentContainerStyle={{ paddingTop: 12, gap: 10 }}
               renderItem={({ item }) => {
                 const danger = item.mode === "emergency";
@@ -134,9 +144,7 @@ export default function HistoryScreen() {
                       <View style={styles.rowTop}>
                         <Text style={styles.rowTime}>{fmtTime(item.created_at)}</Text>
                         <View style={[styles.badge, danger ? styles.badgeDanger : styles.badgeActive]}>
-                          <Text style={styles.badgeText}>
-                            {danger ? "EMERGENCY" : "ACTIVE"}
-                          </Text>
+                          <Text style={styles.badgeText}>{danger ? "EMERGENCY" : "ACTIVE"}</Text>
                         </View>
                       </View>
 
