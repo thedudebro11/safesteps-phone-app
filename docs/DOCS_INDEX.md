@@ -27,6 +27,9 @@ Master directory of SafeSteps documentation.
 - **SECURITY_NOTES.md**  
   Threat model and security decisions (tokens, RLS, storage, rate limits).
 
+- **SYSTEM_ARCHITECTURE.md**
+  High-level end-to-end system map
+
 ---
 
 ## Planning & Ops Docs
