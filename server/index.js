@@ -30,6 +30,24 @@ app.use("/api/visibility", visibilityRouter);
 app.use("/api/live", liveRouter);
 app.use("/api/history", historyRouter);
 
+async function checkSupabase() {
+  try {
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .select("user_id")
+      .limit(1);
+
+    if (error) throw error;
+
+    console.log("✅ Supabase connection OK");
+  } catch (err) {
+    console.error("❌ Supabase connection FAILED");
+    console.error(err.message);
+  }
+}
+
+checkSupabase();
+
 
 // Set REQUIRE_AUTH=true if you want to force auth even in dev.
 const REQUIRE_AUTH = String(process.env.REQUIRE_AUTH || "").toLowerCase() === "true";

@@ -1,25 +1,46 @@
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 /**
- * Returns the API base URL for the current runtime.
+ * Resolve API base URL safely for Expo / React Native.
  *
  * Priority:
- * 1) EXPO_PUBLIC_API_BASE_URL (explicit override; best for prod/dev control)
- * 2) Expo hostUri-based LAN auto-detect (best dev UX in Expo Go)
- * 3) Fallback localhost (mainly for web)
+ * 1) EXPO_PUBLIC_API_BASE_URL
+ * 2) Expo host auto-detect from manifest/debug host
+ * 3) localhost only for web
+ *
+ * On native, never silently fall back to localhost.
+ * Fail loudly so bad config is obvious.
  */
 export function getApiBaseUrl() {
-  const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL;
-  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+  const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  if (fromEnv) {
+    return fromEnv.replace(/\/+$/, "");
+  }
 
-  // Expo Go dev sessions provide hostUri like "192.168.0.76:8081"
-  const hostUri = Constants.expoConfig?.hostUri;
-  const host = hostUri?.split(":")[0];
+  const possibleHosts = [
+    // Common Expo locations depending on runtime/version
+    (Constants.expoConfig as any)?.hostUri,
+    (Constants as any)?.manifest2?.extra?.expoGo?.debuggerHost,
+    (Constants as any)?.manifest?.debuggerHost,
+  ].filter(Boolean) as string[];
 
-  if (host) return `http://${host}:3000`;
+  for (const hostValue of possibleHosts) {
+    const host = String(hostValue).split(":")[0];
+    if (host) {
+      return `http://${host}:3000`;
+    }
+  }
 
-  // last resort
-  return "http://localhost:3000";
+  if (Platform.OS === "web") {
+    return "http://localhost:3000";
+  }
+
+  throw new Error(
+    "Could not resolve API base URL on native. Set EXPO_PUBLIC_API_BASE_URL in .env."
+  );
 }
 
 export const API_BASE_URL = getApiBaseUrl();
+
+console.log("[API_BASE_URL]", API_BASE_URL);
