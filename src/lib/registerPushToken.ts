@@ -20,15 +20,21 @@ import Constants from "expo-constants";
 import { apiFetch } from "@/src/lib/apiClient";
 
 export async function registerPushToken(): Promise<void> {
-  // Push tokens are only meaningful on native physical devices.
   if (Platform.OS === "web") return;
+
   if (!Device.isDevice) {
     console.log("[PushToken] Skipping — not a physical device (simulator/emulator)");
     return;
   }
 
+  // Skip noisy unsupported path in Expo Go on Android
+  const isExpoGo = Constants.appOwnership === "expo";
+  if (Platform.OS === "android" && isExpoGo) {
+    console.log("[PushToken] Skipping — Expo Go on Android does not support remote push registration");
+    return;
+  }
+
   try {
-    // Check current permission status before prompting.
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -42,10 +48,6 @@ export async function registerPushToken(): Promise<void> {
       return;
     }
 
-    // Read EAS projectId from app config if available.
-    // This is automatically set by `eas build`. During Expo Go development it may
-    // be absent, in which case Expo falls back to a development token.
-    // Once EAS is configured, set extra.eas.projectId in app.json and this picks it up.
     const projectId =
       (Constants.expoConfig?.extra as Record<string, any> | undefined)?.eas?.projectId ??
       undefined;
@@ -55,17 +57,16 @@ export async function registerPushToken(): Promise<void> {
     );
 
     const expoToken = tokenResult.data;
-    // Platform.OS is narrowed to "ios" | "android" here because we returned early on "web".
     const platform = Platform.OS as "ios" | "android";
 
     await apiFetch("/api/push/register", {
       method: "POST",
+      auth: true,
       json: { expoToken, platform },
     });
 
     console.log("[PushToken] Registered successfully", { platform });
   } catch (e) {
-    // Non-fatal. The app functions normally without a registered push token.
     console.warn(
       "[PushToken] Registration failed (non-fatal):",
       e instanceof Error ? e.message : String(e)

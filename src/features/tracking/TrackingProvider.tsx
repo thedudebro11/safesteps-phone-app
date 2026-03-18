@@ -5,6 +5,7 @@ import { Alert } from "react-native";
 import { supabase } from "@/src/lib/supabase";
 import { useShares } from "@/src/features/shares/SharesProvider";
 import { API_BASE_URL } from "@/src/lib/api";
+import { sendEmergencyAlert } from "@/src/lib/sendEmergencyAlert";
 
 type TrackingMode = "idle" | "active" | "emergency";
 export type TrackingFrequency = number;
@@ -308,6 +309,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       await ensurePermission();
       const emergencyFreq: TrackingFrequency = 30;
       await startLoop("emergency", emergencyFreq);
+      void sendEmergencyAlert();
     } catch {
       Alert.alert("Location permission required", "Lume needs foreground location permission to send emergency pings.");
     }
