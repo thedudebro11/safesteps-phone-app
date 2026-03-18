@@ -1,6 +1,6 @@
 // src/features/home/MapFirstHomeScreen.native.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -57,8 +57,25 @@ export default function MapFirstHomeScreen() {
   const inFlightRef = useRef(false);
 
   const [boostPollUntil, setBoostPollUntil] = useState<number>(0);
-
   const lastCountRef = useRef<number>(0);
+
+  // ✅ Emergency status pill pulse animation (opacity only — native driver safe)
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (mode === "emergency") {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 0.55, duration: 900, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [mode, pulseAnim]);
+
   // ✅ When tracking turns on (and we have a fix), center on it.
   useEffect(() => {
     if (!allowMapLocation) return;
@@ -75,11 +92,8 @@ export default function MapFirstHomeScreen() {
     );
   }, [allowMapLocation, lastFix]);
 
-
-
   const fetchVisible = useCallback(async () => {
-    // If not authed, don’t poll (trusted live markers are authed-only)
-
+    // If not authed, don't poll (trusted live markers are authed-only)
     if (!accessToken) {
       setVisibleUsers([]);
       setLastUpdatedIso(null);
@@ -105,7 +119,7 @@ export default function MapFirstHomeScreen() {
       const json = (await res.json()) as { users?: LiveVisibleUser[] };
       const users = Array.isArray(json.users) ? json.users : [];
 
-      // Don’t render myself as an “other” marker (you already have blue-dot)
+      // Don't render myself as an "other" marker (you already have blue-dot)
       const others = myUserId ? users.filter((u) => u.userId !== myUserId) : users;
       const nextCount = others.length;
       if (nextCount !== lastCountRef.current) {
@@ -122,9 +136,6 @@ export default function MapFirstHomeScreen() {
     }
   }, [accessToken, myUserId, API_BASE_URL]);
 
-
-
-
   useEffect(() => {
     const prev = prevAllowRef.current;
     const now = allowMapLocation;
@@ -137,11 +148,6 @@ export default function MapFirstHomeScreen() {
 
     prevAllowRef.current = now;
   }, [allowMapLocation, fetchVisible]);
-
-
-
-  
-
 
   useFocusEffect(
     useCallback(() => {
@@ -185,12 +191,26 @@ export default function MapFirstHomeScreen() {
     }, [fetchVisible, boostPollUntil, accessToken, allowMapLocation])
   );
 
-  const statusText = useMemo(() => {
-    if (!accessToken) return "Sign in to see trusted live markers";
-    if (errorMsg) return `Live feed error`;
-    if (isFirstLoad) return "Loading live feed…";
-    return `${visibleUsers.length} visible`;
-  }, [accessToken, errorMsg, isFirstLoad, visibleUsers.length]);
+  // Status pill — derives label, border, background, and text color from mode
+  const modeLabel =
+    mode === "emergency"
+      ? "EMERGENCY ACTIVE"
+      : mode === "active"
+      ? "Sharing location"
+      : "Location private";
+
+  const modePillBorderColor =
+    mode === "emergency" ? "#ff3b4e" : mode === "active" ? "#3896ff" : "#1a2035";
+
+  const modePillBg =
+    mode === "emergency" ? "rgba(58,10,16,0.92)" : "rgba(5,8,20,0.78)";
+
+  const modePillTextColor =
+    mode === "emergency" ? "#ff3b4e" : mode === "active" ? "#e7ecff" : "#a6b1cc";
+
+  const modeDotColor = mode === "emergency" ? "#ff3b4e" : "#3896ff";
+
+  const contactCount = visibleUsers.length;
 
   return (
     <View style={styles.root}>
@@ -222,30 +242,53 @@ export default function MapFirstHomeScreen() {
         })}
       </MapView>
 
-      {/* TOP OVERLAY */}
+      {/* TOP OVERLAY ROW */}
       <View pointerEvents="box-none" style={[styles.topRow, { top: insets.top + 10 }]}>
+        {/* Settings icon */}
         <Pressable style={styles.iconCircle}>
           <Text style={styles.iconText}>⚙️</Text>
         </Pressable>
 
-        <View style={styles.centerPill}>
-          <Text style={styles.centerPillText}>SafeSteps</Text>
-          <Text style={styles.centerPillCaret}>▾</Text>
-        </View>
+        {/* Mode status pill — replaces static "SafeSteps ▾" center pill */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.modePill,
+            {
+              backgroundColor: modePillBg,
+              borderColor: modePillBorderColor,
+              opacity: mode === "emergency" ? pulseAnim : 1,
+            },
+          ]}
+        >
+          {mode !== "idle" && (
+            <View style={[styles.modeDot, { backgroundColor: modeDotColor }]} />
+          )}
+          <Text style={[styles.modePillText, { color: modePillTextColor }]}>
+            {modeLabel}
+          </Text>
+        </Animated.View>
 
+        {/* Notifications icon */}
         <Pressable style={styles.iconCircle}>
           <Text style={styles.iconText}>🔔</Text>
         </Pressable>
       </View>
 
-      {/* LIVE FEED STATUS */}
-      <View pointerEvents="none" style={[styles.statusPill, { top: insets.top + 62 }]}>
-        <Text style={styles.statusText}>
-          {statusText}
-          {lastUpdatedIso ? ` • ${new Date(lastUpdatedIso).toLocaleTimeString()}` : ""}
-        </Text>
-        {errorMsg ? <Text style={styles.statusError}>{errorMsg}</Text> : null}
-      </View>
+      {/* CONTACT VISIBILITY BADGE
+          Only rendered when contacts are visible AND tracking is active.
+          Never shown in idle — contacts can only see you when you're sharing. */}
+      {contactCount > 0 && allowMapLocation && (
+        <View
+          pointerEvents="none"
+          style={[styles.contactBadge, { top: insets.top + 62 }]}
+        >
+          <View style={styles.contactBadgeDot} />
+          <Text style={styles.contactBadgeText}>
+            {contactCount} {contactCount === 1 ? "contact" : "contacts"} visible
+          </Text>
+        </View>
+      )}
 
       {/* FLOATING ACTION SURFACE */}
       <BottomActionDrawer tabBarHeight={tabBarHeight} />
@@ -254,7 +297,8 @@ export default function MapFirstHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#fff" },
+  // Step 1: dark background matches drawer — eliminates white flash
+  root: { flex: 1, backgroundColor: "#050814" },
 
   topRow: {
     position: "absolute",
@@ -265,59 +309,78 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
+  // Step 3: dark translucent treatment to match drawer theme
   iconCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.95)",
+    backgroundColor: "rgba(5,8,20,0.78)",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
+    borderColor: "#1a2035",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.3,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
   iconText: { fontSize: 16 },
 
-  centerPill: {
+  // Step 4: mode status pill — replaces static center pill
+  modePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 18,
+    gap: 7,
+    paddingHorizontal: 16,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.95)",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
     shadowColor: "#000",
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.3,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
-  centerPillText: { fontSize: 18, fontWeight: "900", color: "rgba(0,0,0,0.88)" },
-  centerPillCaret: { fontSize: 14, color: "rgba(0,0,0,0.45)", marginTop: 2 },
+  modeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  modePillText: {
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
 
-  statusPill: {
+  // Step 5: compact right-aligned badge replaces full-width status bar
+  contactBadge: {
     position: "absolute",
-    left: 14,
     right: 14,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(5,8,20,0.78)",
+    borderWidth: 1,
+    borderColor: "#1a2035",
     shadowColor: "#000",
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  statusText: { color: "rgba(0,0,0,0.85)", fontWeight: "800" },
-  statusError: { color: "#b00020", fontWeight: "700" },
+  contactBadgeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#34d399",
+  },
+  contactBadgeText: {
+    color: "#a6b1cc",
+    fontSize: 12,
+    fontWeight: "700",
+  },
 });

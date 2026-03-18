@@ -39,6 +39,7 @@ export default function BottomActionDrawer({ tabBarHeight }: Props) {
 
     const isEmergency = mode === "emergency";
     const isActive = mode === "active";
+    const isIdle = mode === "idle";
 
     const STOPS = useMemo(
         () => [30, 60, 300] as const satisfies readonly TrackingFrequency[],
@@ -46,22 +47,18 @@ export default function BottomActionDrawer({ tabBarHeight }: Props) {
     );
 
     /**
-     * Drawer sizing
+     * Drawer sizing — unchanged from original.
      * Height animates. Bottom stays glued.
      */
-    const HANDLE_H = 44;          // must match styles.handleZone.height
-    const PEEK_CONTENT_H = 14;    // tiny “peek” under the handle (adjust 0–30)
+    const HANDLE_H = 44;
+    const PEEK_CONTENT_H = 14;
     const COLLAPSED_H = HANDLE_H + PEEK_CONTENT_H;
 
-
-    // How tall drawer is allowed to become when fully expanded.
-    // Keep this under top pills, etc.
     const MAX_HEIGHT = Math.min(
         560,
         screenH - (insets.top + 80) - tabBarHeight
     );
 
-    // Animated height of the drawer (this is the whole trick)
     const heightRaw = useRef(new Animated.Value(COLLAPSED_H)).current;
     const lastHeight = useRef(COLLAPSED_H);
 
@@ -97,7 +94,6 @@ export default function BottomActionDrawer({ tabBarHeight }: Props) {
             },
 
             onPanResponderMove: (_, gesture) => {
-                // Drag up => increase height. Drag down => decrease height.
                 const next = clamp(
                     lastHeight.current - gesture.dy,
                     COLLAPSED_H,
@@ -108,7 +104,6 @@ export default function BottomActionDrawer({ tabBarHeight }: Props) {
 
             onPanResponderRelease: () => {
                 heightRaw.stopAnimation((value: number) => {
-                    // Free-drag: keep where released (just clamp)
                     settleHeight(value);
                 });
             },
@@ -122,12 +117,7 @@ export default function BottomActionDrawer({ tabBarHeight }: Props) {
         });
     };
 
-    const onPressEmergency = () => {
-        safeRun(async () => {
-            if (isEmergency) await stopEmergency();
-            else await startEmergency();
-        });
-    };
+    // ─── Action handlers (logic unchanged) ───────────────────────────────────
 
     const onPressActive = () => {
         safeRun(async () => {
@@ -136,17 +126,85 @@ export default function BottomActionDrawer({ tabBarHeight }: Props) {
         });
     };
 
-    // ✅ formatted to nearest hundredth for minutes
+    const onPressEmergency = () => {
+        safeRun(async () => {
+            if (isEmergency) await stopEmergency();
+            else await startEmergency();
+        });
+    };
+
+    // ─── Hold-to-cancel emergency ────────────────────────────────────────────
+    // useNativeDriver: false because width (layout) cannot use native driver.
+    const holdProgress = useRef(new Animated.Value(0)).current;
+
+    const onCancelPressIn = () => {
+        Animated.timing(holdProgress, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: false,
+        }).start();
+    };
+
+    const onCancelPressOut = () => {
+        holdProgress.stopAnimation();
+        Animated.timing(holdProgress, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: false,
+        }).start();
+    };
+
+    const onCancelLongPress = () => {
+        holdProgress.setValue(0);
+        safeRun(async () => await stopEmergency());
+    };
+
+    // ─── Display values ───────────────────────────────────────────────────────
+
+    // Step 2: fixed format — no more "5.00 min"
     const frequencyLabel =
-        frequencySec < 60 ? `${frequencySec}s` : `${(frequencySec / 60).toFixed(2)} min`;
+        frequencySec < 60
+            ? `${frequencySec}s`
+            : `${Math.round(frequencySec / 60)} min`;
+
+    // Step 7: state-aware title
+    const drawerTitle = isEmergency
+        ? "EMERGENCY ACTIVE"
+        : isActive
+        ? "Sharing your location"
+        : "Your location is private";
+
+    const drawerTitleColor = isEmergency
+        ? "#ff3b4e"
+        : isActive
+        ? "#e7ecff"
+        : "#a6b1cc";
+
+    // Frequency sub-label shown when not idle
+    const freqSubLabel = isEmergency
+        ? "Pinging every 30s · Emergency mode"
+        : `Pinging every ${frequencyLabel}`;
+
+    // Step 8: state-aware top accent border
+    const topBorderColor = isEmergency
+        ? "#ff3b4e"
+        : isActive
+        ? "#3896ff"
+        : "transparent";
+
+    // Hold-to-cancel fill width interpolation
+    const cancelFillWidth = holdProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: ["0%", "100%"],
+    });
 
     return (
         <View
             style={[
                 styles.shell,
                 {
-                    bottom: 0,      // ✅ offset happens HERE (once)
-                    height: MAX_HEIGHT,        // ✅ shell reserves the max visual region
+                    bottom: 0,
+                    height: MAX_HEIGHT,
                 },
             ]}
             pointerEvents="box-none"
@@ -155,111 +213,131 @@ export default function BottomActionDrawer({ tabBarHeight }: Props) {
                 style={[
                     styles.container,
                     {
-                        bottom: 0,               // ✅ DO NOT offset again
-                        height: heightRaw,       // ✅ only height animates
+                        bottom: 0,
+                        height: heightRaw,
+                        // Step 8: top accent line, overrides borderWidth for top side only
+                        borderTopColor: topBorderColor,
+                        borderTopWidth: 2,
                     },
                 ]}
             >
-                {/* Drag only from the handle */}
+                {/* Step 10: Emergency red tint overlay — absolutely behind all content */}
+                {isEmergency && (
+                    <View style={styles.emergencyOverlay} pointerEvents="none" />
+                )}
+
+                {/* Drag handle — drag only from this zone */}
                 <View style={styles.handleZone} {...panResponder.panHandlers}>
                     <View style={styles.handle} />
                 </View>
 
-                {/* ✅ do NOT pad by tabBarHeight here */}
                 <View style={[styles.content, { paddingBottom: 16 }]}>
-                    {/* Header */}
-                    <View style={styles.titleRow}>
-                        <Text style={styles.title}>Tracking</Text>
-                        <View
-                            style={[
-                                styles.modePill,
-                                isEmergency
-                                    ? styles.modePillDanger
-                                    : isActive
-                                        ? styles.modePillActive
-                                        : styles.modePillIdle,
-                            ]}
-                        >
-                            <Text style={styles.modePillText}>
-                                {isEmergency ? "EMERGENCY" : isActive ? "ACTIVE" : "IDLE"}
-                            </Text>
-                        </View>
+
+                    {/* Step 7: State-aware title block */}
+                    <View style={styles.titleBlock}>
+                        <Text style={[styles.title, { color: drawerTitleColor }]}>
+                            {drawerTitle}
+                        </Text>
+                        {/* Frequency sub-label — only when tracking is running */}
+                        {!isIdle && (
+                            <Text style={styles.freqSubLabel}>{freqSubLabel}</Text>
+                        )}
                     </View>
 
-                    {/* Actions */}
-                    <View style={styles.actionsRow}>
-                        <Pressable
-                            onPress={onPressEmergency}
-                            style={[
-                                styles.bigBtn,
-                                isEmergency ? styles.bigBtnDanger : styles.bigBtnNeutral,
-                            ]}
-                        >
-                            <Text style={styles.bigBtnText}>
-                                {isEmergency ? "Stop Emergency" : "Emergency"}
-                            </Text>
-                        </Pressable>
-
+                    {/* ─── IDLE + ACTIVE: vertical primary/secondary button stack ─── */}
+                    {/* Step 6: primary CTA — full width, state-aware label and style */}
+                    {!isEmergency && (
                         <Pressable
                             onPress={onPressActive}
                             style={[
-                                styles.bigBtn,
-                                isActive ? styles.bigBtnPrimary : styles.bigBtnNeutral,
+                                styles.primaryBtn,
+                                isActive ? styles.primaryBtnStop : styles.primaryBtnStart,
                             ]}
                         >
-                            <Text style={styles.bigBtnText}>
-                                {isActive ? "Stop Tracking" : "Active Tracking"}
+                            <Text
+                                style={[
+                                    styles.primaryBtnText,
+                                    isActive ? styles.primaryBtnTextStop : styles.primaryBtnTextStart,
+                                ]}
+                            >
+                                {isActive ? "Stop Sharing" : "Start Sharing"}
                             </Text>
                         </Pressable>
-                    </View>
+                    )}
 
-                    {/* Slider */}
-                    <View style={styles.section}>
-                        <View style={styles.sliderHeaderRow}>
-                            <Text style={styles.sliderTitle}>Ping frequency</Text>
-                            <View style={styles.sliderValuePill}>
-                                <Text style={styles.sliderValueText}>{frequencyLabel} ping</Text>
+                    {/* Step 6: secondary emergency button — full width, below primary.
+                        Active state gets a filled dark background so it reads as more
+                        serious than just an outlined button next to Stop Sharing. */}
+                    {!isEmergency && (
+                        <Pressable
+                            onPress={onPressEmergency}
+                            style={[
+                                styles.emergencyBtn,
+                                isActive ? styles.emergencyBtnActive : styles.emergencyBtnIdle,
+                            ]}
+                        >
+                            <Text style={styles.emergencyBtnText}>Emergency Alert</Text>
+                        </Pressable>
+                    )}
+
+                    {/* ─── EMERGENCY: hold-to-cancel replaces normal actions ─── */}
+                    {/* Step 12: hold 1.5s to cancel — prevents accidental cancellation */}
+                    {isEmergency && (
+                        <Pressable
+                            onPressIn={onCancelPressIn}
+                            onPressOut={onCancelPressOut}
+                            onLongPress={onCancelLongPress}
+                            delayLongPress={1500}
+                            style={styles.cancelBtn}
+                        >
+                            {/* Progress fill animates from left to right on hold */}
+                            <Animated.View
+                                style={[styles.cancelFill, { width: cancelFillWidth }]}
+                            />
+                            <Text style={styles.cancelBtnText}>Hold to Cancel Emergency</Text>
+                        </Pressable>
+                    )}
+
+                    {/* Step 11: Frequency slider — hidden in emergency (locked at 30s) */}
+                    {!isEmergency && (
+                        <View style={styles.section}>
+                            <View style={styles.sliderHeaderRow}>
+                                <Text style={styles.sliderTitle}>Ping frequency</Text>
+                                <View style={styles.sliderValuePill}>
+                                    <Text style={styles.sliderValueText}>{frequencyLabel}</Text>
+                                </View>
+                            </View>
+
+                            <DiscreteFrequencySlider
+                                valueSec={frequencySec}
+                                stopsSec={STOPS}
+                                onChange={setFrequency}
+                                stepSec={5}
+                                showLiveValueLabel
+                                // Step 2: consistent format — no toFixed(2)
+                                formatStopLabel={(sec) =>
+                                    sec < 60 ? `${sec}s` : `${Math.round(sec / 60)} min`
+                                }
+                            />
+                        </View>
+                    )}
+
+                    {/* Step 9: Privacy info card — idle state only, no clutter when active */}
+                    {isIdle && (
+                        <View style={styles.section}>
+                            <View style={styles.infoCard}>
+                                <Text style={styles.infoTitle}>Privacy-first by default</Text>
+                                <Text style={styles.infoBody}>
+                                    Your location is only shared when you choose to. Stop at any time.
+                                </Text>
                             </View>
                         </View>
+                    )}
 
-                        <DiscreteFrequencySlider
-                            valueSec={frequencySec}
-                            stopsSec={STOPS}
-                            onChange={setFrequency}
-                            stepSec={5}
-                            showLiveValueLabel
-                            formatStopLabel={(sec) =>
-                                sec < 60 ? `${sec}s` : `${(sec / 60).toFixed(2)}m`
-                            }
-                        />
-
-                        <View style={styles.batteryRow}>
-                            <View style={styles.batterySide}>
-                                <Text style={styles.batteryIcon}>🔋</Text>
-                                <Text style={styles.batteryText}>Less battery</Text>
-                            </View>
-
-                            <View style={styles.batterySide}>
-                                <Text style={styles.batteryText}>More battery</Text>
-                                <Text style={styles.batteryIcon}>🔋</Text>
-                            </View>
-                        </View>
-                    </View>
-
-                    {/* Info card */}
-                    <View style={styles.section}>
-                        <View style={styles.infoCard}>
-                            <Text style={styles.infoTitle}>Privacy-first by default</Text>
-                            <Text style={styles.infoBody}>
-                                Pings are append-only events. Retries are safe. Emergency overrides all states.
-                            </Text>
-                        </View>
-                    </View>
                 </View>
             </Animated.View>
         </View>
     );
-
 }
 
 const styles = StyleSheet.create({
@@ -276,15 +354,30 @@ const styles = StyleSheet.create({
         backgroundColor: "#050814",
         borderTopLeftRadius: 22,
         borderTopRightRadius: 22,
+        // Left, right, bottom borders — top is overridden inline for the accent
         borderColor: "#1a2035",
         borderWidth: 1,
         overflow: "hidden",
     },
+
+    // Step 10: red tint overlay — absolutely positioned, behind all content
+    emergencyOverlay: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "#3a0a10",
+        opacity: 0.45,
+    },
+
     handleZone: {
         height: 44,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#050814",
+        // Transparent so the emergency overlay tint shows through the handle area
+        backgroundColor: "transparent",
+        zIndex: 1,
     },
     handle: {
         width: 48,
@@ -292,77 +385,116 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         backgroundColor: "#1a2035",
     },
+
     content: {
         flex: 1,
         paddingHorizontal: 16,
+        zIndex: 1,
     },
-    titleRow: {
+
+    // Step 7: title block replaces the old titleRow + modePill
+    titleBlock: {
         marginTop: 4,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
+        marginBottom: 16,
+        gap: 4,
     },
     title: {
-        color: "#e7ecff",
         fontSize: 18,
         fontWeight: "800",
     },
-    modePill: {
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 999,
-        borderWidth: 1,
+    freqSubLabel: {
+        color: "#a6b1cc",
+        fontSize: 13,
+        fontWeight: "600",
     },
-    modePillIdle: {
-        backgroundColor: "#0c1020",
-        borderColor: "#1a2035",
-    },
-    modePillActive: {
-        backgroundColor: "#0c1020",
-        borderColor: "#3896ff",
-    },
-    modePillDanger: {
-        backgroundColor: "#1a0a12",
-        borderColor: "#ff4b5c",
-    },
-    modePillText: {
-        color: "#e7ecff",
-        fontSize: 12,
-        fontWeight: "800",
-        letterSpacing: 0.5,
-    },
-    actionsRow: {
-        marginTop: 14,
-        flexDirection: "row",
-        gap: 12,
-    },
-    bigBtn: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 16,
+
+    // Step 6: primary action button (Start Sharing / Stop Sharing)
+    primaryBtn: {
+        width: "100%",
+        height: 52,
+        borderRadius: 14,
         borderWidth: 1,
         alignItems: "center",
         justifyContent: "center",
+        marginBottom: 10,
     },
-    bigBtnNeutral: {
-        backgroundColor: "#0c1020",
-        borderColor: "#1a2035",
-    },
-    bigBtnPrimary: {
-        backgroundColor: "#0c1020",
+    // Start Sharing: blue fill — positive, inviting
+    primaryBtnStart: {
+        backgroundColor: "#3896ff",
         borderColor: "#3896ff",
     },
-    bigBtnDanger: {
-        backgroundColor: "#1a0a12",
-        borderColor: "#ff4b5c",
+    // Stop Sharing: outlined danger — cautious, not alarming
+    primaryBtnStop: {
+        backgroundColor: "transparent",
+        borderColor: "#ff3b4e",
     },
-    bigBtnText: {
-        color: "#e7ecff",
+    primaryBtnText: {
+        fontSize: 15,
+        fontWeight: "800",
+    },
+    primaryBtnTextStart: {
+        color: "#ffffff",
+    },
+    primaryBtnTextStop: {
+        color: "#ff3b4e",
+    },
+
+    // Step 6: secondary emergency button (shown in idle + active)
+    emergencyBtn: {
+        width: "100%",
+        height: 46,
+        borderRadius: 14,
+        borderWidth: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 10,
+    },
+    // Idle: outlined only — emergency is present but not alarming
+    emergencyBtnIdle: {
+        backgroundColor: "transparent",
+        borderColor: "#ff3b4e",
+    },
+    // Active: dark filled background — more visually serious alongside Stop Sharing
+    emergencyBtnActive: {
+        backgroundColor: "#1a0a12",
+        borderColor: "#ff3b4e",
+    },
+    emergencyBtnText: {
+        color: "#ff3b4e",
         fontSize: 14,
         fontWeight: "800",
     },
+
+    // Step 12: hold-to-cancel emergency button
+    cancelBtn: {
+        width: "100%",
+        height: 52,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: "#ff3b4e",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden", // clips progress fill to rounded corners
+        marginBottom: 10,
+    },
+    // Animated fill — width driven by holdProgress (0% → 100%)
+    cancelFill: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        bottom: 0,
+        backgroundColor: "#ff3b4e",
+        opacity: 0.3,
+    },
+    cancelBtnText: {
+        color: "#ff3b4e",
+        fontSize: 14,
+        fontWeight: "800",
+    },
+
+    // Frequency slider section
     section: {
-        marginTop: 16,
+        marginTop: 6,
     },
     sliderHeaderRow: {
         flexDirection: "row",
@@ -388,32 +520,15 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: "900",
     },
-    batteryRow: {
-        marginTop: 10,
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-    },
-    batterySide: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-    },
-    batteryIcon: {
-        fontSize: 14,
-        color: "#aab3d6",
-    },
-    batteryText: {
-        fontSize: 12,
-        fontWeight: "700",
-        color: "#aab3d6",
-    },
+
+    // Step 9: privacy info card — idle only
     infoCard: {
         backgroundColor: "#0c1020",
         borderColor: "#1a2035",
         borderWidth: 1,
         borderRadius: 18,
         padding: 14,
+        marginTop: 6,
     },
     infoTitle: {
         color: "#e7ecff",
