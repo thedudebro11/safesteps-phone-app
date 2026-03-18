@@ -44,8 +44,8 @@ export default function RegisterScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Create account</Text>
           <Text style={styles.subtitle}>
-            Make a SafeSteps account to sync history, trusted contacts and
-            family maps across devices.
+            Your contacts, history, and settings — private by default and
+            always under your control.
           </Text>
         </View>
 
