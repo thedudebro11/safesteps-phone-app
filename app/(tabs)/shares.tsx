@@ -22,7 +22,7 @@ const CARD_BG = "#0c1020";
 const BORDER = "#1a2035";
 const ACCENT = "#3896ff";
 const MUTED = "#a6b1cc";
-const DANGER = "#ff4b5c";
+const DANGER = "#ff3b4e";
 const OK = "#34d399";
 const AMBER = "#fbbf24";
 

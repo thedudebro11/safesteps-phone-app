@@ -20,7 +20,7 @@ const CARD_BG = "#0c1020";
 const BORDER = "#1a2035";
 const ACCENT = "#3896ff";
 const MUTED = "#a6b1cc";
-const DANGER = "#ff4b5c";
+const DANGER = "#ff3b4e";
 const OK = "#34d399";
 const AMBER = "#fbbf24";
 
@@ -418,8 +418,8 @@ const styles = StyleSheet.create({
   // ── Error banner
   bannerDanger: {
     borderWidth: 1,
-    borderColor: "rgba(255,75,92,0.4)",
-    backgroundColor: "rgba(255,75,92,0.10)",
+    borderColor: "rgba(255,59,78,0.4)",
+    backgroundColor: "rgba(255,59,78,0.10)",
     borderRadius: 14,
     padding: 12,
   },

@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   // ── Entry card
   // Left-accent border immediately signals mode on scan
   entry: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: BORDER,
     borderLeftWidth: 3,
