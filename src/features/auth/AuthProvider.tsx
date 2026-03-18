@@ -1,7 +1,8 @@
 // src/features/auth/AuthProvider.tsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/src/lib/supabase";
+import { registerPushToken } from "@/src/lib/registerPushToken";
 
 type AuthContextValue = {
   user: User | null;
@@ -20,6 +21,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthActionLoading, setIsAuthActionLoading] = useState(false);
   const [isHydrating, setIsHydrating] = useState(true);
+
+  // Push token registration — fire once per distinct authenticated user.
+  // Tracks the last user ID for which we attempted registration so that session
+  // token refreshes (same user, new JWT) don't trigger unnecessary re-registrations.
+  const registeredForUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const userId = user?.id ?? null;
+    if (!userId) return;
+    if (registeredForUserId.current === userId) return;
+
+    registeredForUserId.current = userId;
+    // Best-effort, non-blocking. registerPushToken never throws.
+    void registerPushToken();
+  }, [user?.id]);
 
   // Initial session hydration (from AsyncStorage/web localStorage via supabase client config)
   useEffect(() => {
