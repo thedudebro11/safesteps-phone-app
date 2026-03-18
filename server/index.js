@@ -8,6 +8,7 @@ const { trustRouter } = require("./routes/trust");
 const { visibilityRouter } = require("./routes/visibility");
 const { liveRouter } = require("./routes/live");
 const { pushRouter } = require("./routes/push");
+const { emergencyRouter } = require("./routes/emergency");
 const express = require("express");
 const cors = require("cors");
 const { supabaseAdmin, supabaseAuth } = require("./lib/supabaseAdmin");
@@ -31,6 +32,9 @@ app.use("/api/visibility", visibilityRouter);
 app.use("/api/live", liveRouter);
 app.use("/api/history", historyRouter);
 app.use("/api/push", pushRouter);
+// Handles POST /api/emergency/alert only.
+// POST /api/emergency (location ping) remains inline below — unchanged.
+app.use("/api/emergency", emergencyRouter);
 
 async function checkSupabase() {
   try {
