@@ -27,13 +27,6 @@ export async function registerPushToken(): Promise<void> {
     return;
   }
 
-  // Skip noisy unsupported path in Expo Go on Android
-  const isExpoGo = Constants.appOwnership === "expo";
-  if (Platform.OS === "android" && isExpoGo) {
-    console.log("[PushToken] Skipping — Expo Go on Android does not support remote push registration");
-    return;
-  }
-
   try {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -58,7 +51,7 @@ export async function registerPushToken(): Promise<void> {
 
     const expoToken = tokenResult.data;
     const platform = Platform.OS as "ios" | "android";
-
+    console.log("[PushToken] Registering", { platform });
     await apiFetch("/api/push/register", {
       method: "POST",
       auth: true,

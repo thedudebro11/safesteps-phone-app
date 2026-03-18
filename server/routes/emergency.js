@@ -68,12 +68,12 @@ emergencyRouter.post("/alert", requireUser, async (req, res) => {
 
     if (recentAlert) {
       // Record the suppressed attempt, then acknowledge cleanly.
-      await supabaseAdmin
+      const { error: dedupInsertError } = await supabaseAdmin
         .from("emergency_alerts")
-        .insert({ sender_user_id: senderId, recipient_count: 0, deduped: true })
-        .catch((e) =>
-          console.error("[emergency/alert] dedup record insert error:", e?.message)
-        );
+        .insert({ sender_user_id: senderId, recipient_count: 0, deduped: true });
+      if (dedupInsertError) {
+        console.error("[emergency/alert] dedup record insert error:", dedupInsertError.message);
+      }
 
       console.log("[emergency/alert] deduplicated (within 90s window)", { senderId });
       return res.json({ ok: true, deduplicated: true });
@@ -112,12 +112,12 @@ emergencyRouter.post("/alert", requireUser, async (req, res) => {
     recipientIds.delete(senderId);
 
     if (recipientIds.size === 0) {
-      await supabaseAdmin
+      const { error: noRecipientsInsertError } = await supabaseAdmin
         .from("emergency_alerts")
-        .insert({ sender_user_id: senderId, recipient_count: 0, deduped: false })
-        .catch((e) =>
-          console.error("[emergency/alert] no-recipients record error:", e?.message)
-        );
+        .insert({ sender_user_id: senderId, recipient_count: 0, deduped: false });
+      if (noRecipientsInsertError) {
+        console.error("[emergency/alert] no-recipients record error:", noRecipientsInsertError.message);
+      }
 
       console.log("[emergency/alert] no eligible recipients", { senderId });
       return res.json({ ok: true, recipientCount: 0 });
@@ -136,12 +136,12 @@ emergencyRouter.post("/alert", requireUser, async (req, res) => {
     const tokens = (tokenRows ?? []).map((r) => r.expo_push_token);
 
     if (tokens.length === 0) {
-      await supabaseAdmin
+      const { error: noTokensInsertError } = await supabaseAdmin
         .from("emergency_alerts")
-        .insert({ sender_user_id: senderId, recipient_count: 0, deduped: false })
-        .catch((e) =>
-          console.error("[emergency/alert] no-tokens record error:", e?.message)
-        );
+        .insert({ sender_user_id: senderId, recipient_count: 0, deduped: false });
+      if (noTokensInsertError) {
+        console.error("[emergency/alert] no-tokens record error:", noTokensInsertError.message);
+      }
 
       console.log("[emergency/alert] no registered tokens for recipients", {
         senderId,
@@ -218,19 +218,20 @@ emergencyRouter.post("/alert", requireUser, async (req, res) => {
     // ── 7. Record the alert ──────────────────────────────────────────────────
     // recipient_count = number of tokens dispatched to Expo.
     // Confirmed delivery requires receipt polling (deferred to a future phase).
-    await supabaseAdmin
+    const { error: alertInsertError } = await supabaseAdmin
       .from("emergency_alerts")
       .insert({
         sender_user_id: senderId,
         recipient_count: tokens.length,
         deduped: false,
-      })
-      .catch((e) =>
-        console.error("[emergency/alert] alert record insert error:", e?.message)
-      );
+      });
+    if (alertInsertError) {
+      console.error("[emergency/alert] alert record insert error:", alertInsertError.message);
+    }
 
     console.log("[emergency/alert] sent", {
       senderId,
+      eligibleRecipients: recipientIds.size,
       recipientCount: tokens.length,
     });
 
