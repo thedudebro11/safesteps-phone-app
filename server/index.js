@@ -274,6 +274,6 @@ app.post("/api/emergency", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ SafeSteps dev API listening on http://localhost:${PORT}`);
+  console.log(`✅ Lume dev API listening on http://localhost:${PORT}`);
   console.log(`   REQUIRE_AUTH=${REQUIRE_AUTH ? "true" : "false"}`);
 });

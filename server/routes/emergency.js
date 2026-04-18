@@ -169,7 +169,7 @@ emergencyRouter.post("/alert", requireUser, async (req, res) => {
 
     // ── 5. Build notification payloads ───────────────────────────────────────
     // No coordinates, no addresses, no raw location data.
-    const notificationBody = `${senderName} has activated emergency mode — open SafeSteps to check in.`;
+    const notificationBody = `${senderName} has activated emergency mode — open Lume to check in.`;
 
     const messages = tokens.map((token) => ({
       to: token,
