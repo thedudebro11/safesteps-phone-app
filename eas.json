@@ -1,0 +1,40 @@
+{
+  "cli": {
+    "version": ">= 3.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+          "EXPO_PUBLIC_SUPABASE_URL": "https://mjpsaosthkwodacjabjs.supabase.co",
+          "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_2JlNb5Z2_id3AiLM1A0anA_VLg_Fs2Q",
+          "EXPO_PUBLIC_API_BASE_URL": "https://lume.up.railway.app"
+        }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://mjpsaosthkwodacjabjs.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_2JlNb5Z2_id3AiLM1A0anA_VLg_Fs2Q",
+        "EXPO_PUBLIC_API_BASE_URL": "https://lume.up.railway.app"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://mjpsaosthkwodacjabjs.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_2JlNb5Z2_id3AiLM1A0anA_VLg_Fs2Q",
+        "EXPO_PUBLIC_API_BASE_URL": "https://lume.up.railway.app"
+      }
+    }
+  }
+}

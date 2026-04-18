@@ -231,7 +231,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
           notificationTitle:
             nextMode === "emergency"
               ? "🚨 Emergency mode active"
-              : "SafeSteps is tracking your location",
+              : "Lume is tracking your location",
           notificationBody:
             nextMode === "emergency"
               ? "Emergency pings are being sent. Open app to stop."

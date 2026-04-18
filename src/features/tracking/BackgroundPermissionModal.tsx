@@ -30,7 +30,7 @@ export function BackgroundPermissionModal({
         <View style={styles.card}>
           <Text style={styles.title}>How should tracking work?</Text>
           <Text style={styles.subtitle}>
-            Choose how SafeSteps tracks your location. You can change this later
+            Choose how Lume tracks your location. You can change this later
             in Settings.
           </Text>
 
@@ -65,7 +65,7 @@ export function BackgroundPermissionModal({
               </Text>
               <Text style={styles.optionDesc}>
                 Tracking continues even when you lock your phone or use other
-                apps. Open SafeSteps to stop it whenever you're ready.
+                apps. Open Lume to stop it whenever you're ready.
               </Text>
             </View>
           </Pressable>

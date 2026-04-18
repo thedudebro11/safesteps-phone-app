@@ -1,6 +1,6 @@
 // src/lib/registerPushToken.ts
 //
-// Registers the current device's Expo push token with the SafeSteps backend.
+// Registers the current device's Expo push token with the Lume backend.
 //
 // Behaviour:
 //   - No-op on web (web push is out of scope for this phase).

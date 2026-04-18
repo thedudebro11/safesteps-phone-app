@@ -8,6 +8,7 @@ type AuthContextValue = {
   user: User | null;
   session: Session | null;
   isAuthenticated: boolean;
+  isGuest: boolean;
   isAuthActionLoading: boolean;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -120,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       session,
       isAuthenticated,
+      isGuest: false,
       isAuthActionLoading: isAuthActionLoading || isHydrating,
       signUpWithEmail,
       signInWithEmail,
