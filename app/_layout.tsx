@@ -1,5 +1,7 @@
 // app/_layout.tsx
 import "react-native-gesture-handler";
+// Must be imported before any navigation so the background task is registered on startup.
+import "@/src/lib/backgroundLocationTask";
 
 import React from "react";
 import { ActivityIndicator, View, StyleSheet } from "react-native";

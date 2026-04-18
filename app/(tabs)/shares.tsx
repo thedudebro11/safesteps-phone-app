@@ -191,7 +191,9 @@ export default function SharesScreen() {
     const pastSessions = shares.filter((s) => s.status === "ended");
     const hasSessions = shares.length > 0;
 
-    // ✅ End share handler — logic unchanged from original
+    // INVARIANT: activeShares must be captured BEFORE endShare() is called.
+    // Share state updates async, so querying after the call produces a stale
+    // snapshot and willStopEmergency will be wrong. See docs/sharing-and-emergency.md.
     async function handleEndShare(item: ShareSession) {
         const ok = await confirm(
             "End session?",

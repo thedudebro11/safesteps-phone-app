@@ -178,20 +178,24 @@ If/when we add server routes or Edge Functions:
 
 ---
 
-## 9) Hardening TODO (Shortlist)
+## 9) Hardening Status
 
-Near-term:
+### Implemented
+- **Rate limiting on guest share path** — `rateLimitByKey()` in `server/index.js:81`, keyed on `share:${shareToken}`, enforced inside `requireGuestShare()` with 30–60s windows.
+  - Limitation: in-memory only — resets on server restart. Persistent rate limiting (Redis or DB-backed) is still a future need.
+
+### Near-term TODO
 - Add Zod validation for all client→server requests
-- Implement rate limits for:
-  - share creation
-  - token validation
+- Rate limiting still needed for:
   - emergency ping endpoints
+  - authenticated share creation (current impl only covers guest path)
 - Add token hashing + revoke/block enforcement (share model)
 - Add security checks to CI:
   - dependency audit
   - lint rules preventing secret leakage
+- Persistent rate limiting (replace in-memory map with durable store)
 
-Later:
+### Later
 - Lightweight abuse heuristics (burst detection)
 - WAF / CDN protections for public viewer endpoints
 - Periodic “security release cadence” (30–60 days)

@@ -159,3 +159,21 @@ Design decisions must prioritize:
 • no hidden tracking  
 
 The system must never allow silent location tracking.
+
+---
+
+# 11 safeRun() Guards All Async UI Actions
+
+`safeRun` in `src/features/home/components/BottomActionDrawer.tsx` wraps every async press handler on the home screen (`onPressActive`, `onPressEmergency`, `onCancelLongPress`).
+
+It catches thrown errors and surfaces them via `Alert.alert` instead of silently failing or crashing.
+
+Rules:
+
+• All async actions triggered from the home action drawer must be wrapped in `safeRun`  
+• Do not bypass it with a raw `void fn()` call  
+• Do not remove it in refactors without replacing the error surface  
+
+Why:
+
+Tracking and emergency actions fail silently on mobile networks. Without this wrapper, a rejected promise on a press handler produces no user feedback and no crash — the action just disappears.
