@@ -48,3 +48,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Claude memory (large binary, machine-local)
+.claude/mind.mv2
