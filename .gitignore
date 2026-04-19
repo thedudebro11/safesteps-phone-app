@@ -32,6 +32,7 @@ yarn-error.*
 
 # local env files
 eas.json
+google-services.json
 .env
 .env.local
 .env.development
