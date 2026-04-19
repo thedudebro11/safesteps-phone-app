@@ -1,11 +1,9 @@
-const base = require("./app.json");
-
-/** @type {import('expo/config').ExpoConfig} */
-module.exports = {
-  ...base.expo,
+/** @type {import('expo/config').ConfigContext} */
+module.exports = ({ config }) => ({
+  ...config,
   newArchEnabled: true,
   android: {
-    ...base.expo.android,
+    ...config.android,
     edgeToEdgeEnabled: true,
     config: {
       googleMaps: {
@@ -13,4 +11,4 @@ module.exports = {
       },
     },
   },
-};
+});
