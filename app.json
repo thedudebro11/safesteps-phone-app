@@ -38,11 +38,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "package": "com.thedevguy0101.safestepsapp",
-      "edgeToEdgeEnabled": true,
-      "config": {
-        "googleMaps": {}
-      }
+      "package": "com.thedevguy0101.safestepsapp"
     },
     "web": {
       "output": "static",
