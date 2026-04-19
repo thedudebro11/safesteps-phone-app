@@ -12,6 +12,8 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "location",
+          "fetch",
+          "location",
           "fetch"
         ]
       }
@@ -29,9 +31,18 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "package": "com.thedevguy0101.safestepsapp"
+      "package": "com.thedevguy0101.safestepsapp",
+      "edgeToEdgeEnabled": true,
+      "config": {
+        "googleMaps": {}
+      }
     },
     "web": {
       "output": "static",
@@ -73,6 +84,12 @@
       "eas": {
         "projectId": "e33bfe9c-785f-463b-9dda-6440e058146a"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e33bfe9c-785f-463b-9dda-6440e058146a"
     }
   }
 }
