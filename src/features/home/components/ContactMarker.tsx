@@ -88,8 +88,8 @@ export default function ContactMarker({ userId, lat, lng, mode, displayName, ema
       </View>
 
       {/* ── Callout (native popup on tap) ── */}
-      <Callout tooltip onPress={() => openDirections(lat, lng)}>
-        <View style={styles.callout}>
+      <Callout tooltip>
+        <Pressable style={styles.callout} onPress={() => openDirections(lat, lng)}>
           <Text style={styles.calloutName} numberOfLines={1}>{label}</Text>
           <View style={[styles.calloutBadge, { borderColor, backgroundColor: isEmergency ? "rgba(255,59,78,0.12)" : "rgba(52,211,153,0.10)" }]}>
             <View style={[styles.calloutDot, { backgroundColor: borderColor }]} />
@@ -99,7 +99,7 @@ export default function ContactMarker({ userId, lat, lng, mode, displayName, ema
           </View>
           <View style={styles.calloutDivider} />
           <Text style={styles.calloutAction}>Tap to get directions →</Text>
-        </View>
+        </Pressable>
       </Callout>
     </Marker>
   );
