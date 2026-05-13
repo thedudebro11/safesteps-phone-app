@@ -4,6 +4,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/src/lib/supabase";
 import { registerPushToken } from "@/src/lib/registerPushToken";
 import { readJson, writeJson } from "@/src/lib/storage";
+import { log } from "@/src/lib/logger";
 
 const GUEST_FLAG_KEY = "safesteps_guest";
 
@@ -61,28 +62,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const { data, error } = await supabase.auth.getSession();
-        if (error) console.error("[Auth] getSession error:", error);
+        if (error) log.error("auth", "getSession error", error);
         if (!mounted) return;
 
         const nextSession = data?.session ?? null;
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
+        log.info("auth", "session hydrated", { userId: nextSession?.user?.id ?? null });
 
         // Only restore guest flag if there is no real session
         if (!nextSession) {
           const storedGuest = await readGuestFlag();
-          if (storedGuest) setGuestMode(true);
+          if (storedGuest) {
+            setGuestMode(true);
+            log.info("auth", "guest flag restored");
+          }
         }
       } catch (e) {
-        console.error("[Auth] getSession threw:", e);
+        log.error("auth", "getSession threw", e);
       } finally {
         if (mounted) setIsHydrating(false);
       }
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
+      log.info("auth", "auth state change", { event, userId: nextSession?.user?.id ?? null });
       // Only clear guest mode when a real authenticated user appears — NOT on SIGNED_OUT
       if (nextSession?.user) {
         setGuestMode(false);
@@ -98,11 +104,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUpWithEmail = async (email: string, password: string) => {
     setIsAuthActionLoading(true);
+    log.info("auth", "sign up attempt");
     try {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
+      log.info("auth", "sign up ok");
     } catch (e) {
-      console.error("[Auth] signUpWithEmail error:", e);
+      log.error("auth", "sign up error", e);
       alert(e instanceof Error ? e.message : "Sign up failed");
     } finally {
       setIsAuthActionLoading(false);
@@ -111,11 +119,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithEmail = async (email: string, password: string) => {
     setIsAuthActionLoading(true);
+    log.info("auth", "sign in attempt");
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      log.info("auth", "sign in ok");
     } catch (e) {
-      console.error("[Auth] signInWithEmail error:", e);
+      log.error("auth", "sign in error", e);
       alert(e instanceof Error ? e.message : "Sign in failed");
     } finally {
       setIsAuthActionLoading(false);
@@ -124,12 +134,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     setIsAuthActionLoading(true);
+    log.info("auth", "sign out");
     try {
       await supabase.auth.signOut();
       setGuestMode(false);
       await writeGuestFlag(false);
     } catch (e) {
-      console.error("[Auth] signOut error:", e);
+      log.error("auth", "sign out error", e);
       alert(e instanceof Error ? e.message : "Sign out failed");
     } finally {
       setIsAuthActionLoading(false);
@@ -138,8 +149,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startGuestSession = async () => {
     setIsAuthActionLoading(true);
+    log.info("auth", "guest session start");
     try {
-      // Clear any stale Supabase session first
       await supabase.auth.signOut().catch(() => {});
       setSession(null);
       setUser(null);
@@ -152,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const endGuestSession = async () => {
     setIsAuthActionLoading(true);
+    log.info("auth", "guest session end");
     try {
       setGuestMode(false);
       await writeGuestFlag(false);

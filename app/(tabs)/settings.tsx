@@ -1,5 +1,5 @@
 // app/(tabs)/settings.tsx
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Linking,
   ActivityIndicator,
 } from "react-native";
+import LogViewer from "@/src/components/LogViewer";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
@@ -43,6 +44,21 @@ export default function SettingsScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  const [showLogs, setShowLogs] = useState(false);
+  const versionTaps = useRef(0);
+  const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleVersionTap = () => {
+    versionTaps.current += 1;
+    if (versionTapTimer.current) clearTimeout(versionTapTimer.current);
+    if (versionTaps.current >= 7) {
+      versionTaps.current = 0;
+      setShowLogs(true);
+    } else {
+      versionTapTimer.current = setTimeout(() => { versionTaps.current = 0; }, 3000);
+    }
+  };
 
   const handlePickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -289,7 +305,9 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>About</Text>
           <Text style={styles.label}>Version</Text>
-          <Text style={styles.value}>{APP_VERSION}</Text>
+          <Pressable onPress={handleVersionTap} hitSlop={12}>
+            <Text style={styles.value}>{APP_VERSION}</Text>
+          </Pressable>
         </View>
 
         {/* ── Sign out ─────────────────────────────────────────────── */}
@@ -305,6 +323,7 @@ export default function SettingsScreen() {
           </Text>
         </Pressable>
       </ScrollView>
+      <LogViewer visible={showLogs} onClose={() => setShowLogs(false)} />
     </SafeAreaView>
   );
 }

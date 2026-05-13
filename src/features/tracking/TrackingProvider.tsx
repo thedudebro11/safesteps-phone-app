@@ -19,6 +19,7 @@ import {
   setBackgroundTaskMode,
 } from "@/src/lib/backgroundLocationTask";
 import { BackgroundPermissionModal } from "./BackgroundPermissionModal";
+import { log } from "@/src/lib/logger";
 
 type TrackingMode = "idle" | "active" | "emergency";
 export type TrackingFrequency = number;
@@ -151,17 +152,10 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Dev health check ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!__DEV__) return;
     fetch(`${API_BASE_URL}/health`)
       .then((r) => r.json())
-      .then((j) =>
-        console.log("[API] /health", j, { baseUrl: API_BASE_URL })
-      )
-      .catch((e) =>
-        console.warn("[API] /health failed", String(e), {
-          baseUrl: API_BASE_URL,
-        })
-      );
+      .then((j) => log.info("api", "health ok", j))
+      .catch((e) => log.warn("api", "health failed", { url: API_BASE_URL, err: String(e) }));
   }, []);
 
   // ─── Boot reconciliation: end stale shares from cold restarts ───────────────
@@ -173,9 +167,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     if (mode === "idle") {
       const active = getActiveShares();
       if (active.length > 0) {
-        console.log("[Boot] Ending stale live shares after restart", {
-          count: active.length,
-        });
+        log.warn("boot", "ending stale shares", { count: active.length });
         void endAllLiveShares();
       }
     }
@@ -197,10 +189,10 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       );
       if (running) {
         await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-        console.log("[Tracking] background task stopped");
+        log.info("tracking", "bg task stopped");
       }
     } catch (e: any) {
-      console.warn("[Tracking] stopBackgroundTask error:", e?.message);
+      log.warn("tracking", "bg task stop error", e?.message);
     }
     isBackgroundTrackingRef.current = false;
     setIsBackgroundTracking(false);
@@ -244,10 +236,10 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
       isBackgroundTrackingRef.current = true;
       setIsBackgroundTracking(true);
-      console.log("[Tracking] background task started", { nextMode, freqSec });
+      log.info("tracking", "bg task started", { mode: nextMode, freqSec });
       return true;
     } catch (e: any) {
-      console.error("[Tracking] startBackgroundTask error:", e?.message);
+      log.error("tracking", "bg task start error", e?.message);
       isBackgroundTrackingRef.current = false;
       setIsBackgroundTracking(false);
       return false;
@@ -326,15 +318,11 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
         ...fix,
       });
       setLastPingAt(nowMs());
-      console.log("[Tracking] Ping OK", {
-        mode: effectiveMode,
-        frequencySec: freqOverride ?? frequencySec,
-        result,
-      });
+      log.info("tracking", "ping ok", { mode: effectiveMode, lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM });
     } catch (e: any) {
       const msg = e?.message ? String(e.message) : "Unknown tracking error";
       setLastError(msg);
-      console.warn("[Tracking] Ping failed", msg);
+      log.error("tracking", "ping failed", msg);
 
       if (
         String(msg).toLowerCase().includes("missing access token") ||
@@ -368,7 +356,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     const token = await getAccessTokenSafe();
     if (!token) return;
     try {
-      console.log("[Tracking] stopPresence -> POST /api/presence/stop");
+      log.info("tracking", "stopping presence");
       const res = await fetch(`${API_BASE_URL}/api/presence/stop`, {
         method: "POST",
         headers: {
@@ -377,17 +365,14 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
         },
       });
       const text = await res.text().catch(() => "");
-      console.log("[Tracking] stopPresence <-", res.status, text);
+      log.info("tracking", "presence stopped", { status: res.status, body: text });
     } catch (e: any) {
-      console.warn(
-        "[Tracking] stopPresence network error",
-        String(e?.message ?? e)
-      );
+      log.warn("tracking", "presence stop error", String(e?.message ?? e));
     }
   };
 
   const stopAll = async () => {
-    console.log("[Tracking] stopAll", { modeBefore: mode });
+    log.info("tracking", "stop all", { mode });
     const prevMode = mode;
 
     stopInterval();
@@ -437,10 +422,12 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   // ─── Public actions ───────────────────────────────────────────────────────────
   const startActive = async () => {
     if (mode === "emergency") return;
+    log.info("tracking", "start active");
 
     try {
       await ensurePermission();
     } catch {
+      log.warn("tracking", "start active: no location permission");
       Alert.alert(
         "Location permission required",
         "Lume needs foreground location permission to send pings."
@@ -472,9 +459,11 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const startEmergency = async () => {
+    log.warn("tracking", "start emergency");
     try {
       await ensurePermission();
     } catch {
+      log.warn("tracking", "start emergency: no location permission");
       Alert.alert(
         "Location permission required",
         "Lume needs foreground location permission to send emergency pings."
