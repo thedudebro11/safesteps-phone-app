@@ -174,7 +174,7 @@ export default function HomeActionSheet({
 
         {/* Status */}
         <View style={styles.status}>
-          <Text style={styles.statusTitle}>Emergency</Text>
+          <Text style={styles.statusTitle}>potato</Text>
           <Text style={styles.statusSub}>
             {statusText ?? `Last ping interval ${Math.round(frequencySec / 60)} min`}
           </Text>
