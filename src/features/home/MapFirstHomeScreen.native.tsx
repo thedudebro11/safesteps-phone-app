@@ -1,12 +1,13 @@
 // src/features/home/MapFirstHomeScreen.native.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker, Region } from "react-native-maps";
+import MapView, { Region } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
 
 import BottomActionDrawer from "@/src/features/home/components/BottomActionDrawer";
+import ContactMarker from "@/src/features/home/components/ContactMarker";
 import { useTracking } from "@/src/features/tracking/TrackingProvider";
 import { API_BASE_URL } from "@/src/lib/api";
 import { useAuth } from "@/src/features/auth/AuthProvider";
@@ -21,7 +22,36 @@ type LiveVisibleUser = {
   expiresAt: string;
   displayName: string | null;
   email: string | null;
+  avatarUrl: string | null;
 };
+
+// ── Dark navy map style — matches app's #050814 theme ───────────────────────
+const DARK_MAP_STYLE = [
+  { elementType: "geometry", stylers: [{ color: "#0c1120" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#6b7fa0" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#050814" }] },
+  { featureType: "administrative", elementType: "geometry", stylers: [{ color: "#1a2035" }] },
+  { featureType: "administrative.country", elementType: "labels.text.fill", stylers: [{ color: "#9aa0b0" }] },
+  { featureType: "administrative.land_parcel", stylers: [{ visibility: "off" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#bdc5d5" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#080e1c" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6b7fa0" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#060e14" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#3a5a40" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a2240" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#050814" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#8896b0" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#1e2a4a" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#243060" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#0c1530" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#a0b0cc" }] },
+  { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#556080" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#0a1028" }] },
+  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#6b7fa0" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#030810" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3d5a70" }] },
+  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#020508" }] },
+];
 
 export default function MapFirstHomeScreen() {
   const insets = useSafeAreaInsets();
@@ -219,6 +249,7 @@ export default function MapFirstHomeScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={DEFAULT_REGION}
+        customMapStyle={DARK_MAP_STYLE}
         pitchEnabled
         rotateEnabled
         zoomEnabled
@@ -228,18 +259,18 @@ export default function MapFirstHomeScreen() {
         followsUserLocation={allowMapLocation}
         showsMyLocationButton={allowMapLocation}
       >
-        {/* ✅ Render trusted live users */}
-        {visibleUsers.map((u) => {
-          const label = u.displayName || u.email || "Trusted contact";
-          return (
-            <Marker
-              key={u.userId}
-              coordinate={{ latitude: u.lat, longitude: u.lng }}
-              title={label}
-              description={u.mode === "emergency" ? "Emergency" : "Live"}
-            />
-          );
-        })}
+        {visibleUsers.map((u) => (
+          <ContactMarker
+            key={u.userId}
+            userId={u.userId}
+            lat={u.lat}
+            lng={u.lng}
+            mode={u.mode}
+            displayName={u.displayName}
+            email={u.email}
+            avatarUrl={u.avatarUrl}
+          />
+        ))}
       </MapView>
 
       {/* TOP OVERLAY ROW */}

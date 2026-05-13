@@ -11,10 +11,13 @@ import {
   Linking,
   ActivityIndicator,
 } from "react-native";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useAuth } from "@/src/features/auth/AuthProvider";
 import { usePremium } from "@/src/features/premium/PremiumProvider";
 import { useTracking } from "@/src/features/tracking/TrackingProvider";
+import { supabase } from "@/src/lib/supabase";
 import { API_BASE_URL } from "@/src/lib/api";
 
 // Pull version from package.json — kept separate to avoid circular import issues
@@ -36,6 +39,75 @@ export default function SettingsScreen() {
   const [nameInput, setNameInput] = useState("");
   const [nameSaving, setNameSaving] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
+
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  const handlePickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      setAvatarError("Photo library permission required.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.6,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    const asset = result.assets[0];
+    const userId = user?.id;
+    if (!userId) return;
+
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      const ext = asset.uri.split(".").pop()?.toLowerCase() ?? "jpg";
+      const path = `${userId}/avatar.${ext}`;
+
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, blob, { upsert: true, contentType: `image/${ext}` });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+      const bustedUrl = `${publicUrl}?t=${Date.now()}`;
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: bustedUrl })
+        .eq("user_id", userId);
+
+      if (profileError) throw profileError;
+      setAvatarUrl(bustedUrl);
+    } catch (e: any) {
+      setAvatarError(e?.message ?? "Upload failed");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      await supabase.from("profiles").update({ avatar_url: null }).eq("user_id", userId);
+      setAvatarUrl(null);
+    } catch (e: any) {
+      setAvatarError(e?.message ?? "Failed to remove photo");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   const tierLabel = isPremium ? "Premium" : isGuest ? "Guest" : "Free";
 
@@ -100,6 +172,40 @@ export default function SettingsScreen() {
 
           {isAuthenticated && (
             <>
+              {/* ── Profile Photo ── */}
+              <Text style={[styles.label, { marginTop: 12 }]}>Profile Photo</Text>
+              <View style={styles.avatarRow}>
+                <Pressable onPress={handlePickAvatar} disabled={avatarUploading} style={styles.avatarWrap}>
+                  {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={styles.avatarThumb} contentFit="cover" />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarPlaceholderText}>
+                        {(user?.email?.[0] ?? "?").toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  {avatarUploading && (
+                    <View style={styles.avatarOverlay}>
+                      <ActivityIndicator size="small" color="#fff" />
+                    </View>
+                  )}
+                </Pressable>
+                <View style={{ flex: 1, gap: 6 }}>
+                  <Pressable onPress={handlePickAvatar} disabled={avatarUploading} style={[styles.smallBtn, { borderColor: ACCENT }]}>
+                    <Text style={{ color: ACCENT, fontWeight: "700", fontSize: 12 }}>
+                      {avatarUrl ? "Change Photo" : "Upload Photo"}
+                    </Text>
+                  </Pressable>
+                  {avatarUrl && (
+                    <Pressable onPress={handleRemoveAvatar} disabled={avatarUploading} style={[styles.smallBtn, { borderColor: BORDER }]}>
+                      <Text style={{ color: MUTED, fontWeight: "700", fontSize: 12 }}>Remove</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+              {avatarError && <Text style={{ color: DANGER, fontSize: 12, marginTop: 4 }}>{avatarError}</Text>}
+
               <Text style={[styles.label, { marginTop: 12 }]}>Display Name</Text>
               {editingName ? (
                 <View style={{ gap: 8, marginTop: 4 }}>
@@ -234,6 +340,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
+  },
+  avatarRow: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 6 },
+  avatarWrap: { width: 64, height: 64, borderRadius: 32, overflow: "hidden", position: "relative" },
+  avatarThumb: { width: 64, height: 64, borderRadius: 32 },
+  avatarPlaceholder: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: "#1a2035",
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: BORDER,
+  },
+  avatarPlaceholderText: { color: ACCENT, fontSize: 24, fontWeight: "900" },
+  avatarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center", justifyContent: "center",
   },
   linkRow: { paddingVertical: 2 },
   linkText: { color: ACCENT, fontSize: 14 },
