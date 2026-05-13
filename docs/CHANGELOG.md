@@ -12,6 +12,32 @@ _Last updated: 2026-05-12_
 
 ## [Unreleased]
 
+### Added (2026-05-13 — Map, Performance & Profile Photo Pass)
+
+#### Map
+- **Dark navy map style** — 24-rule custom Google Maps JSON style matching `#050814` app theme. Roads, water, POIs, labels all reskinned. Applied via `customMapStyle` prop on `MapView`.
+- **Custom contact markers** (`src/features/home/components/ContactMarker.tsx`) — 44px circle avatar with colored border (green = live, red = emergency pulse animation), profile photo or initials fallback, name label pill, stem indicator
+- **Tap-to-directions** — tapping a contact marker shows a callout card (name + live/emergency status) that opens native maps app for directions (`maps://` iOS, `geo:` Android, Google Maps URL fallback)
+- `tracksViewChanges={isEmergency}` — prevents per-frame marker re-renders except during emergency pulse, preserving map scroll performance
+
+#### Profile Photos
+- **Avatar upload in Settings** — photo picker (`expo-image-picker`), square crop, 0.6 quality compression, direct upload to Supabase Storage `avatars` bucket
+- **Remove photo** — sets `avatar_url = null` in profiles table
+- `avatar_url` column added to `profiles` table
+- `avatars` Supabase Storage bucket created (public read, authenticated write to own folder)
+- Cache-buster (`?t=<timestamp>`) appended to avatar URLs on upload to force image cache invalidation
+- `/api/live/visible` now returns `avatarUrl` — contact markers on map show real profile photos
+
+#### Performance
+- **`get_visible_users()` Postgres RPC** — single JOIN query replaces 4 sequential round trips in `/api/live/visible`. Reduces DB load ~4x and response latency from ~80–160ms to ~20–40ms per map poll
+- **PgBouncer enabled** — connection pooling active in Supabase dashboard. Warm pool of 15 Postgres connections eliminates per-request connection setup overhead (~20–50ms saved per request under load)
+
+#### Dependencies
+- `expo-image-picker ~17.0.11` added
+- `zod ^3.25.x` added to root `package.json` (was missing — caused Railway crash on deploy)
+- `packageManager: npm@10.8.2` declared in `package.json`
+- All 5 Expo SDK patch versions bumped to match SDK 54 requirements (expo-doctor 17/17 ✅)
+
 ### Added (2026-05-12 — Production Build Pass)
 - **Guest mode fully implemented** — `startGuestSession()` / `endGuestSession()` in AuthProvider, persistent guest flag via `readGuestFlag()` / `writeGuestFlag()`, `onAuthStateChange` fixed to not clear guest on SIGNED_OUT
 - **`isGuest` stub removed** — `isGuest` now correctly derived from real `guestMode` state

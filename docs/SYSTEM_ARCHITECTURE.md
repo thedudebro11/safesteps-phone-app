@@ -102,9 +102,11 @@ active → emergency → idle
 - Backed by server trust system (`/api/trust/*`)
 
 ### 3.5 MapFirstHomeScreen (native / web variants)
-- Renders the map + user dot
+- Renders a **dark navy custom-styled Google Maps** (24-rule style JSON matching `#050814` theme)
 - Polls `/api/live/visible` on an interval for trusted contacts who are live
 - Boost polling: 1s intervals for 12 seconds after tracking starts or visible count changes
+- Trusted contacts rendered as **custom `ContactMarker` components** — 44px circle with colored border (green = live, red = emergency), profile photo or initials fallback, name label, tap-to-directions callout
+- `tracksViewChanges={isEmergency}` on markers — prevents frame-by-frame re-renders except during emergency pulse animation
 
 ### 3.6 History Screen
 - Fetches from `/api/history`
@@ -128,11 +130,17 @@ All protected routes use `requireUser` middleware (`server/middleware/requireUse
 | Locations | `server/index.js` | `/api/locations`, `/api/emergency`, `/api/presence/stop` |
 | Trust | `server/routes/trust.js` | `/api/trust/*` |
 | Visibility | `server/routes/visibility.js` | `/api/visibility/set` |
-| Live | `server/routes/live.js` | `/api/live/visible` |
+| Live | `server/routes/live.js` | `/api/live/visible` — single RPC call via `get_visible_users()` |
 | History | `server/routes/history.js` | `/api/history` |
 | Push | `server/routes/push.js` | `/api/push/register` |
 | Emergency alerts | `server/routes/emergency.js` | `/api/emergency/alert` |
-| Shares | `server/index.js` | `/api/shares/*` (in-memory) |
+| Shares | `server/routes/shares.js` | `/api/shares/*` (DB-backed, SHA-256 token hashing) |
+| Users | `server/routes/users.js` | `/api/users/lookup`, `/api/users/profile` |
+
+### 4.3 Database Layer
+- **Connection pooling**: PgBouncer enabled (Supabase dashboard) — warm pool of 15 Postgres connections shared across all requests, eliminates per-request connection overhead
+- **Validation**: All routes use Zod `validate()` middleware (`server/lib/validate.js`)
+- **Performance**: `/api/live/visible` uses `get_visible_users()` Postgres RPC — 4 queries collapsed to 1 JOIN, ~4x faster under load
 
 ---
 

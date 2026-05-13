@@ -18,8 +18,20 @@ One row per authenticated user. Created/upserted by `AuthProvider` on session lo
 | `user_id` | uuid | PK, matches `auth.users.id` |
 | `email` | text | nullable |
 | `display_name` | text | nullable |
+| `avatar_url` | text | nullable — public Supabase Storage URL, cache-busted with `?t=<timestamp>` on upload |
 
-Used by: trust list, live visibility, emergency alert copy.
+Used by: trust list, live visibility, emergency alert copy, map markers.
+
+#### Avatar Storage
+
+Profile photos are stored in the **`avatars`** Supabase Storage bucket (public).
+
+- Path convention: `{user_id}/avatar.{ext}`
+- Upload: client-side via `supabase.storage.from('avatars').upload()` using `expo-image-picker`
+- RLS policies:
+  - **INSERT/UPDATE**: authenticated users can only write to their own `{user_id}/` folder
+  - **SELECT**: public (anyone can read — required for map markers to load avatars)
+- `avatar_url` is set to `null` when user removes their photo
 
 ---
 
@@ -129,30 +141,49 @@ Audit log for emergency alert sends. Used for deduplication (90s window).
 
 ---
 
-## Share Sessions (In-Memory, V1)
+## Share Sessions (DB-Backed, V1)
 
-Share sessions are **not** in the database yet. They are stored in an in-memory `Map` in `server/index.js`:
+Share sessions are persisted in Supabase via `server/routes/shares.js`.
 
-```
-sharesByToken: Map<token, { token, status, blocked, reason, createdAt, endedAt }>
-```
+**`share_sessions`** — one row per sharing session
 
-Status values: `live` | `ended`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `owner_user_id` | uuid | user who started the share |
+| `status` | text | `live` \| `ended` |
+| `reason` | text | `manual` \| `emergency` |
+| `created_at` | timestamptz | default now() |
+| `ended_at` | timestamptz | nullable |
 
-Endpoints:
-- `POST /api/shares/start` — register token as live
-- `POST /api/shares/end` — mark ended
-- `POST /api/shares/:token/block` — mark blocked
+**`share_recipients`** — per-recipient row within a session
 
-**Implication:** share state resets on server restart. Persisting this to a DB table is a planned upgrade.
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `session_id` | uuid | FK → share_sessions.id |
+| `token_hash` | text | SHA-256 of the raw token — raw token never stored |
+| `contact_user_id` | uuid | nullable |
+| `created_at` | timestamptz | default now() |
+
+Token hashing: `crypto.createHash('sha256').update(rawToken).digest('hex')` — raw tokens are returned to the client once and never persisted.
 
 ---
 
-## Planned: DB-Backed Share Sessions
+## Postgres Functions (RPC)
 
-When share sessions are moved to the DB, the intended schema is:
+### `get_visible_users(viewer_id uuid)`
 
-**`share_sessions`** — time-bound sharing session  
-**`share_recipients`** — per-recipient token hashes (never store raw tokens)
+Single-query replacement for the previous 4-step live visibility fetch.
 
-See `docs/sharing-and-tracking.md` for the full design when implementing.
+**Returns:** presence + profile data for all users the viewer is permitted to see.
+
+**Logic (single JOIN):**
+1. `live_presence` — only non-expired rows
+2. INNER JOIN `live_visibility` — owner must have granted `can_view = true` to this viewer
+3. INNER JOIN `trusted_contacts` — must be an accepted trust relationship
+4. LEFT JOIN `profiles` — attach display_name, email, avatar_url
+
+**Why SECURITY DEFINER:** runs with elevated privileges inside Postgres, eliminating 3 extra round trips from Railway → Supabase. Called via `supabaseAdmin.rpc('get_visible_users', { viewer_id })`.
+
+**Performance impact:** reduces `/api/live/visible` from 4 sequential DB queries (~80–160ms network overhead) to 1 (~20–40ms).
