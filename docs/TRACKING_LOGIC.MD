@@ -1,44 +1,39 @@
-
----
-
-### `docs/logic/TRACKING_LOGIC.md`
-```md
 # SafeSteps — Tracking Logic (V1 Canonical)
 
-_Last updated: 2026-01-01_
+_Last updated: 2026-05-12_
 
 This document defines the V1 tracking state machine, timer rules, signal-state derivation, and how tracking interacts with sharing and history.
 
 ---
 
-## 1) Key Principles
+## 1. Key Principles
 
-- **No silent tracking**: tracking only runs when the user explicitly enables it.
-- **One timer at a time**: never allow multiple intervals to run simultaneously.
-- **Emergency overrides**: emergency mode always wins over active tracking.
-- **Honest state**: UI state is derived from real GPS/network conditions and successful sends.
+- **No silent tracking** — tracking only runs when the user explicitly enables it.
+- **One timer at a time** — never allow multiple intervals to run simultaneously.
+- **Emergency overrides** — emergency mode always wins over active tracking.
+- **Honest state** — UI state is derived from real GPS/network conditions and successful sends.
 
 ---
 
-## 2) States
+## 2. States
 
 ### 2.1 TrackingMode
-- `OFF`
-- `ACTIVE`
-- `EMERGENCY`
+- `idle` (off)
+- `active`
+- `emergency`
 
 ### 2.2 SignalState (derived)
 - `ACTIVE` (good)
 - `SPOTTY` (degraded)
 - `DEAD` (no reliable fix and/or cannot transmit)
 
-SignalState is *not* a mode; it is diagnostics used to inform the user.
+SignalState is diagnostics for the user, not a tracking mode.
 
 ---
 
-## 3) Tier Frequency Rules (V1)
+## 3. Tier Frequency Rules (V1)
 
-These are hard clamps; UI may show presets/custom input depending on tier, but the engine must enforce clamps.
+These are hard clamps. The engine enforces them regardless of UI input.
 
 ### Guest
 - Auto presets: **60s / 2m / 5m**
@@ -52,22 +47,22 @@ These are hard clamps; UI may show presets/custom input depending on tier, but t
 ### Paid account
 - Min interval: **15s**
 - Max interval: **60m**
-- Presets and/or custom input allowed, but always clamped.
+- Presets and/or custom input allowed, always clamped.
 
 ---
 
-## 4) Timer Ownership & Safety
+## 4. Timer Ownership & Safety
 
 ### Rules
-- Starting `ACTIVE`:
+- Starting `active`:
   - clear existing timer
   - set interval timer to selected frequency
-- Starting `EMERGENCY`:
+- Starting `emergency`:
   - clear existing timer
   - set emergency interval (tier-defined)
 - Stopping tracking:
   - clear timer
-  - set mode to `OFF`
+  - set mode to `idle`
 
 ### Non-negotiable
 - Never create a second timer while one exists.
@@ -78,25 +73,24 @@ These are hard clamps; UI may show presets/custom input depending on tier, but t
 
 ---
 
-## 5) Ping Pipeline
+## 5. Ping Pipeline
 
-Each ping attempt follows:
+Each ping attempt:
 
-1) Acquire location (lat/lng/accuracy + timestamp)
-2) Determine ping type:
-   - `normal` when mode is `ACTIVE`
-   - `emergency` when mode is `EMERGENCY`
-3) Persist:
-   - guest → local store only
-   - authenticated → Supabase `location_pings`
-4) Update UI diagnostics:
+1. Acquire location (lat/lng/accuracy + timestamp)
+2. Determine endpoint:
+   - `active` mode → `POST /api/locations`
+   - `emergency` mode → `POST /api/emergency`
+3. Persist:
+   - Server writes to `live_presence` (upsert) and `location_history` (insert)
+4. Update UI diagnostics:
    - last successful send time
    - last GPS fix time
    - signal state
 
 ---
 
-## 6) Signal State Derivation (V1)
+## 6. Signal State Derivation (V1)
 
 Signal state is derived from two independent signals:
 
@@ -105,39 +99,37 @@ Signal state is derived from two independent signals:
   - ability to acquire a fix within a timeout window
 
 - **Transmit Health**
-  - ability to successfully write ping to persistence target:
-    - authenticated → Supabase insert success
-    - guest → local store write success (and if sharing requires relay, relay success)
+  - ability to successfully write ping to the server
 
 ### Suggested thresholds (tunable)
 - `ACTIVE`
-  - location fix acquired within timeout (e.g., 8–10s)
-  - and last send succeeded within (2 × interval)
+  - location fix acquired within timeout (8–10s)
+  - last send succeeded within (2 × interval)
 - `SPOTTY`
-  - location fix is slow OR accuracy is poor (e.g., > 50–100m)
+  - location fix is slow OR accuracy is poor (> 50–100m)
   - OR sends are intermittently failing
 - `DEAD`
   - cannot acquire location fix
-  - OR cannot send for a sustained period (e.g., > 3 attempts or > 3 × interval)
+  - OR cannot send for a sustained period (> 3 attempts or > 3 × interval)
 
 The UI must avoid claiming delivery when it cannot confirm it.
 
 ---
 
-## 7) Emergency Mode (V1)
+## 7. Emergency Mode (V1)
 
-Emergency is “broadcast share” behavior:
-- ping type is `emergency`
+Emergency is high-frequency, clearly-labeled mode:
+- Pings go to `POST /api/emergency` (writes `mode=emergency`)
+- `POST /api/emergency/alert` is called separately to send push notifications to trusted contacts
 - UI uses danger styling (red)
-- recipients: all trusted contacts (account-only in V1)
-- emergency timer overrides active tracking timer
+- Emergency timer overrides active tracking timer
 
 Stop behavior:
-- must be deliberate (confirm or press-and-hold) to prevent accidental shutdown
+- Must be deliberate (confirm or press-and-hold) to prevent accidental shutdown
 
 ---
 
-## 8) Sharing Interaction (V1)
+## 8. Sharing Interaction (V1)
 
 ### 8.1 Share creation entry points (UX locked)
 - Home: `Share Live Location` → navigates to Contacts (no share starts there)
@@ -145,73 +137,34 @@ Stop behavior:
 
 ### 8.2 Share session behavior
 - A share session is per recipient and time-bound.
-- When a share is active, pings can be used to update the recipient viewer.
 - Sharing does **not** automatically enable tracking without explicit user consent.
-  - If tracking is OFF, sharing flow must either:
-    - ask user to start tracking, or
-    - start tracking with a clear banner stating it.
+  - If tracking is OFF, the flow must ask the user to start tracking.
 
-### 8.3 History labeling
-History entries must identify:
-- `User Ping`
-- `Trusted Contact Ping — {Contact Name}`
-- `Emergency`
+### 8.3 Active tracking stop ends live shares
+When tracking transitions from `active` → `idle`, `TrackingProvider.stopAll()` calls `SharesProvider.endAllLiveShares()` so the UI cannot remain in a "SHARING" state while tracking is off.
 
-If a ping is associated with a share session, store enough metadata to label it.
+Emergency shares are handled separately through `emergencySync.ts`.
 
 ---
 
-## 9) History Actions (V1)
-
-Each history row supports:
-- `Location Ping`:
-  - focus map on that coordinate
-  - show marker and accuracy circle
-- `Directions`:
-  - open OS-level chooser for navigation apps with destination prefilled
-
----
-
-## 10) Failure Handling
-
-- If ping fails:
-  - do not “pretend” success
-  - surface a subtle error state (non-alarming unless Emergency)
-- If Emergency fails to send:
-  - show prominent warning: “Emergency pings are not being delivered”
-  - encourage user to call emergency services (V1 copy later)
-
----
-## Tracking stop behavior and share cleanup
-
-### Invariant: Active Tracking shutdown ends shares
-When tracking is running in `mode="active"`, users may create live share sessions from Contacts.
-
-**Rule:** If tracking transitions from `"active"` → `"idle"`, the app must end any live share sessions so UI state does not remain in “SHARING” after tracking stops.
-
-### Implementation detail
-`TrackingProvider.stopAll()`:
-- Stops the interval
-- Sets mode to `"idle"`
-- If the previous mode was `"active"`, it calls `SharesProvider.endAllLiveShares()` to end live shares (local-first + best-effort server cleanup)
-
-Emergency mode remains separate:
-- Emergency can still end shares through the existing emergency/share sync logic when a share ends.
-
-
-## Live Visibility Boost Logic
+## 9. Live Visibility Boost Logic
 
 When tracking transitions from idle → active or emergency:
 
-1. I detect the transition using a previous state ref.
-2. I trigger an immediate fetch of visible users.
-3. I enable a temporary 12-second boost polling window.
-4. During boost, polling runs every 1 second.
-5. After boost expires, polling returns to 5 seconds.
+1. Detect transition via previous state ref.
+2. Trigger an immediate fetch of visible users.
+3. Enable a 12-second boost polling window (1s intervals).
+4. After boost, polling returns to 5-second base interval.
 
-I also added logic to:
-- Reset visible users when authentication is lost.
-- Prevent overlapping network calls.
-- Avoid polling entirely while idle.
+`inFlightRef` prevents overlapping network calls. Polling is disabled entirely while idle.
 
-This keeps the system efficient while still feeling real-time.
+---
+
+## 10. Failure Handling
+
+- If ping fails:
+  - do not "pretend" success
+  - surface a subtle non-alarming error state
+- If Emergency fails to send:
+  - show prominent warning: "Emergency pings are not being delivered"
+  - encourage user to call emergency services

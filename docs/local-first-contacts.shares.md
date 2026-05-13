@@ -1,36 +1,60 @@
-ocal-First Contacts + Shares (V1)
+# Contacts & Shares Architecture
 
-## Why local-first
-- Fast UX, works offline, guest-safe by default.
-- Keeps PII local (phone/email not sent anywhere).
-- Backend can be added later by swapping provider internals (repo pattern).
+_Last updated: 2026-05-12_
 
-## Key rule
-Screens call **domain actions**, not storage/network APIs:
+---
 
-- `addContact()`
-- `removeContact()`
-- `createShareForContact()`
-- `endShare()`
+## Current Architecture: Server-Backed
 
-That’s what makes the backend upgrade painless.
+Contacts are now server-backed via the Express trust system. The local-first approach described in early design notes was superseded before V1 shipped.
 
-## Storage behavior
-- Web: localStorage
-- Native: AsyncStorage (if installed)
-- Fallback: in-memory
+### Contacts (trusted_contacts)
 
-## Web compatibility
-React Native’s `Alert.alert()` can be unreliable on web depending on runtime.
-We use `confirm()` helper:
+Managed via `/api/trust/*`:
+- `POST /api/trust/request` — send trust request by userId
+- `GET /api/trust/requests/incoming` — see who requested you
+- `POST /api/trust/requests/:id/accept` — accept + creates reciprocal row
+- `POST /api/trust/requests/:id/deny`
+- `GET /api/trust/list` — accepted contacts with visibility state
+
+### Shares (in-memory, V1)
+
+Share sessions are tracked in-memory on the server (`sharesByToken` Map in `server/index.js`).
+
+Endpoints: `/api/shares/start`, `/api/shares/end`, `/api/shares/:token/block`
+
+**Implication:** share state resets on server restart. Persisting to a DB table is a planned upgrade.
+
+---
+
+## Screen → Domain Action Contract
+
+Screens call domain actions, not storage APIs directly:
+
+- `addContact()` / `removeContact()` → `ContactsProvider`
+- `createShareForContact()` / `endShare()` → `SharesProvider`
+
+This decouples the UI from the underlying persistence layer.
+
+---
+
+## Web Compatibility
+
+`Alert.alert()` can be unreliable on web. Use the `confirm()` helper (`src/lib/confirm.ts`):
 - Web: `window.confirm`
 - Native: `Alert.alert` wrapped in a Promise
 
-## Upgrade path to backend (planned)
-Later we can replace local read/write with Supabase while keeping UI unchanged:
-- `trusted_contacts`
-- `share_sessions`
-- `share_tokens` (hashed tokens, revocable)
-- `location_pings` (later)
+---
 
-Providers remain stable; only persistence changes.
+## Planned: DB-Backed Share Sessions
+
+When shares are moved from in-memory to the DB:
+
+Tables needed:
+- `share_sessions` — time-bound session (`user_id`, `status`, `expires_at`)
+- `share_recipients` — per-recipient token hashes (never store raw tokens)
+- `location_pings` — if per-session location history is added
+
+Providers remain stable; only `SharesProvider` internals change.
+
+See `docs/db/DB_SCHEMA.md` for the planned schema.

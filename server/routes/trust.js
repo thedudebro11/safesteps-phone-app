@@ -2,6 +2,7 @@
 const { Router } = require("express");
 const { requireUser } = require("../middleware/requireUser");
 const { supabaseAdmin } = require("../lib/supabaseAdmin");
+const { validate, schemas } = require("../lib/validate");
 
 const trustRouter = Router();
 
@@ -11,11 +12,10 @@ const trustRouter = Router();
  * - Smart behavior: if there is already an incoming pending request from target -> me,
  *   auto-accept it and create the reciprocal accepted row.
  */
-trustRouter.post("/request", requireUser, async (req, res) => {
+trustRouter.post("/request", requireUser, validate(schemas.trustRequest), async (req, res) => {
   try {
-    const targetUserId = String(req.body?.targetUserId ?? "").trim();
+    const targetUserId = req.body.targetUserId;
 
-    if (!targetUserId) return res.status(400).json({ error: "targetUserId is required" });
     if (targetUserId === req.userId) return res.status(400).json({ error: "Cannot request self" });
 
     // Ensure target exists

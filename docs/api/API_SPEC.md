@@ -1,164 +1,351 @@
-### `docs/api/API_SPEC.md`
-```md
 # SafeSteps — API Specification (V1)
 
-_V1 is Supabase-first._  
-Most authenticated operations are done directly via Supabase (RLS enforced).  
-Public share viewing requires a server-side surface (Edge Function or backend) so raw tokens are never queried client-side.
+_Last updated: 2026-05-12_
+
+The backend is a Node/Express server (`server/index.js`) deployed on Railway.
+All authenticated routes validate the Supabase JWT via `requireUser` middleware.
+
+Base URL (production): `lume-production-ca82.up.railway.app`
 
 ---
 
-## 1) Authenticated App Data (Supabase)
+## Authentication
 
-### 1.1 Contacts
-- Table: `trusted_contacts`
-- Operations:
-  - list contacts for current user
-  - insert/update/delete contact
-- Security: RLS by `user_id = auth.uid()`
+Protected routes require:
+```
+Authorization: Bearer <supabase_access_token>
+```
 
-### 1.2 Location Pings
-- Table: `location_pings`
-- Operations:
-  - insert ping (ACTIVE / EMERGENCY)
-  - list pings (History)
-- Security: RLS by `user_id = auth.uid()`
+The access token is the user's Supabase JWT (`session.access_token`).
+Tokens are validated server-side using `supabaseAuth.auth.getUser(token)`.
 
-### 1.3 Share Sessions
-- Tables:
-  - `share_sessions`
-  - `share_recipients` (token hashes)
-- Operations:
-  - create session (with expiration)
-  - create per-recipient token hash rows
-  - revoke/end session
-  - list active sessions (Shares tab)
-- Security: RLS by `user_id = auth.uid()`
+`REQUIRE_AUTH=true` enforces auth on all routes. In dev it defaults to permissive.
 
 ---
 
-## 2) Public Share Viewer (Recommended Edge Function)
+## Routes
 
-Because viewers do not authenticate, token validation must happen server-side.
+### Health
 
-### 2.1 GET latest location for a share token
+#### `GET /health`
+No auth required.
+```json
+{ "ok": true }
+```
 
-**Endpoint (Edge Function or backend):**
-- `GET /share/latest?token=<raw_token>`
+---
 
-**Behavior:**
-- hash `token` server-side (SHA-256)
-- lookup `share_recipients.token_hash`
-- ensure recipient + session are `active` and not expired
-- fetch latest ping for the owner/session
-- return minimal payload
+### Locations
 
-**Response (example):**
+#### `POST /api/locations`
+Submit an active tracking ping. Upserts `live_presence` and appends to `location_history`.
+
+**Auth:** Bearer token (authed path) or guest share token (guest path)
+
+**Body (authed):**
+```json
+{ "lat": number, "lng": number, "accuracyM": number | null }
+```
+
+**Response:**
+```json
+{ "ok": true, "accepted": true, "mode": "authed" }
+```
+
+---
+
+#### `POST /api/presence/stop`
+Delete the caller's `live_presence` row immediately (instant disappearance from other maps).
+
+**Auth:** Bearer token required
+
+**Response:**
+```json
+{ "ok": true }
+```
+
+---
+
+### Emergency
+
+#### `POST /api/emergency`
+Submit an emergency ping. Same as `/api/locations` but writes `mode: "emergency"` to `live_presence` and `location_history`.
+
+**Auth:** Bearer token (authed path) or guest share token (guest path)
+
+**Body:**
+```json
+{ "lat": number, "lng": number, "accuracyM": number | null }
+```
+
+**Response:**
+```json
+{ "ok": true, "accepted": true, "mode": "authed" }
+```
+
+---
+
+#### `POST /api/emergency/alert`
+Send emergency push notifications to all eligible trusted contacts.
+
+Eligibility: accepted trust in either direction (contacts sender invited + contacts who invited sender).
+`live_visibility` does NOT gate notification delivery — it only gates map visibility.
+
+Deduplication: a second call within 90 seconds of a real send is suppressed and logged with `deduped=true`.
+
+**Auth:** Bearer token required
+
+**Body:** none
+
+**Response:**
+```json
+{ "ok": true, "recipientCount": number }
+// or when deduplicated:
+{ "ok": true, "deduplicated": true }
+```
+
+Push notifications contain no coordinates. Body: `"<senderName> has activated emergency mode — open Lume to check in."`
+
+---
+
+### Trust
+
+#### `POST /api/trust/request`
+Send or upsert a trust request to another user by their `user_id`.
+
+Smart behavior: if the target already has a pending incoming request from me, auto-accepts it and creates the reciprocal row.
+
+**Auth:** Bearer token required
+
+**Body:**
+```json
+{ "targetUserId": "uuid" }
+```
+
+**Response:**
+```json
+{ "ok": true, "request": { id, requester_user_id, requested_user_id, status, created_at, updated_at } }
+// or if auto-accepted:
+{ "ok": true, "autoAccepted": true, "accepted": { ... } }
+```
+
+---
+
+#### `GET /api/trust/requests/incoming`
+List pending trust requests sent to the current user.
+
+**Auth:** Bearer token required
+
+**Response:**
+```json
+{ "requests": [ { id, requester_user_id, requested_user_id, status, created_at, updated_at } ] }
+```
+
+---
+
+#### `POST /api/trust/requests/:id/accept`
+Accept an incoming trust request. Creates a reciprocal accepted row automatically.
+
+**Auth:** Bearer token required. Caller must be the `requested_user_id` of the row.
+
+**Response:**
+```json
+{ "ok": true, "accepted": { id, requester_user_id, requested_user_id, status, updated_at } }
+```
+
+---
+
+#### `POST /api/trust/requests/:id/deny`
+Deny an incoming trust request.
+
+**Auth:** Bearer token required. Caller must be the `requested_user_id` of the row.
+
+**Response:**
+```json
+{ "ok": true }
+```
+
+---
+
+#### `GET /api/trust/list`
+Return accepted trusted contacts for the current user with their profile and visibility setting.
+
+**Auth:** Bearer token required
+
+**Response:**
 ```json
 {
-  "status": "LIVE",
-  "expiresAt": "2026-01-01T20:10:00.000Z",
-  "lastUpdatedAt": "2026-01-01T19:58:10.000Z",
-  "lat": 40.72936,
-  "lng": -73.99363,
-  "accuracyM": 5.0,
-  "mode": "normal"
+  "contacts": [
+    {
+      "userId": "uuid",
+      "email": "string",
+      "displayName": "string | null",
+      "shareEnabled": boolean
+    }
+  ]
 }
-Status derivation for viewer:
+```
 
-LIVE / STALE / OFFLINE (revoked/expired)
+`shareEnabled` = whether the current user has set `can_view=true` for this contact in `live_visibility`. Sorted by displayName then email.
 
-SERVICE_DOWN when function not reachable
+---
 
-2.2 POST revoke token (viewer “stop receiving”) (optional V1+)
-POST /share/revoke
+### Visibility
 
-json
-Copy code
-{ "token": "<raw_token>" }
-Server:
+#### `POST /api/visibility/set`
+Set whether a trusted contact can see you live on the map.
 
-hash token
+**Auth:** Bearer token required. Trust must be accepted before this can be set.
 
-set share_recipients.status = 'revoked'
+**Body:**
+```json
+{ "viewerUserId": "uuid", "canView": boolean }
+```
 
-3) Guest Sharing (Optional; if enabled)
-Guest mode is local-only by default.
-If guest share links are allowed in V1, they require a relay surface (Edge Function/back-end) because guests have no auth.uid().
+**Response:**
+```json
+{ "ok": true, "visibility": { owner_user_id, viewer_user_id, can_view, updated_at } }
+```
 
-Suggested endpoints:
+---
 
-POST /guest/share/start
+### Live Map
 
-POST /guest/share/ping
+#### `GET /api/live/visible`
+Return trusted contacts who are currently live and permitted to be seen by the caller.
 
-POST /guest/share/stop
+Filter logic (all three conditions must be met):
+1. `live_presence.expires_at > now()`
+2. `live_visibility` row where `owner = them, viewer = me, can_view = true`
+3. `trusted_contacts` accepted row where `requester = me, requested = them`
 
-These must be rate-limited and expiration-enforced.
+**Auth:** Bearer token required
 
-4) Auth for Server Surfaces
-If using a backend/edge function for authenticated operations:
+**Response:**
+```json
+{
+  "users": [
+    {
+      "userId": "uuid",
+      "lat": number,
+      "lng": number,
+      "accuracyM": number | null,
+      "mode": "active" | "emergency",
+      "updatedAt": "iso",
+      "expiresAt": "iso",
+      "displayName": "string | null",
+      "email": "string | null"
+    }
+  ]
+}
+```
 
-require Authorization: Bearer <supabase_access_token>
+---
 
-verify JWT using Supabase
+### History
 
-If using only Supabase tables:
+#### `GET /api/history`
+Return the caller's location history, newest first. Defaults to last 24 hours, limit 200.
 
-client uses Supabase session directly (RLS enforced)
+**Auth:** Bearer token required
 
-5) Security Requirements (Non-negotiable)
-Share tokens are high entropy
+**Query params:**
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `from` | ISO date | 24h ago | inclusive |
+| `to` | ISO date | now | inclusive |
+| `mode` | `active` \| `emergency` | all | optional filter |
 
-Store only token hashes in DB
+**Response:**
+```json
+{
+  "items": [ { id, user_id, lat, lng, accuracy_m, mode, created_at } ],
+  "from": "iso",
+  "to": "iso",
+  "mode": "all" | "active" | "emergency"
+}
+```
 
-Never allow anonymous reads on user tables
+---
 
-Public viewer access must be mediated by server code (Edge Function/back-end)
+### Push Tokens
 
-Add rate limiting on token endpoints
+#### `POST /api/push/register`
+Register or refresh an Expo push token for the current user. Safe to call repeatedly (upserts on `user_id + expo_push_token`). Multiple devices per user are supported.
 
-## Troubleshooting: Guest Mode "Flips Back to False" / Won't Enter App
+**Auth:** Bearer token required
 
-### Symptom
-After tapping "Continue as Guest":
-- Logs show `guestMode: true` briefly
-- Then `guestMode: false` + `hasSession: false`
-- User stays on login screen / navigation doesn't move
+**Body:**
+```json
+{ "expoToken": "ExponentPushToken[...]", "platform": "ios" | "android" }
+```
 
-### Root Cause
-Calling `supabase.auth.signOut()` during `startGuestSession()` triggers Supabase `onAuthStateChange(SIGNED_OUT, null)`.
-If the AuthProvider listener blindly sets `guestMode = false` whenever session changes, it overrides the guest transition.
+**Response:**
+```json
+{ "ok": true }
+```
 
-This creates a race:
-1) startGuestSession sets guestMode true
-2) SIGNED_OUT event sets guestMode false
-3) route guard sees `hasSession=false` → stays/redirects to login
+---
 
-### Fix
-1) Make Supabase auth listener disable guest mode ONLY when a real user session exists:
-- If `newSession?.user` → setGuestMode(false) and clear guest flag
-- If `newSession` is null → do NOT change guestMode
+### Shares (In-Memory, V1)
 
-2) Persist guest mode across reloads (web + native):
-- `GUEST_FLAG_KEY = "safesteps_guest"`
-- Implement `readGuestFlag()` + `writeGuestFlag(on)`:
-  - web: localStorage
-  - native: AsyncStorage
+Share state is stored in-memory on the server. Resets on server restart.
 
-3) Restore guest mode on app start:
-- During initial `loadSession()`:
-  - if no Supabase user AND `storedGuest === true`:
-    - setSession(null)
-    - setUser(null)
-    - setGuestMode(true)
+#### `POST /api/shares/start`
+Register a share token as live.
 
-### Debugging Checklist
-- Confirm `EXPO_PUBLIC_API_BASE_URL` resolves correctly on device (LAN IP, not localhost).
-- Confirm logs end with:
-  - `guestMode: true`
-  - `hasSession: true`
-  - `isGuest: true`
-- If guest flips off, search for any code calling:
-  - `endGuestSession()`
-  - `setGuestMode(false)` outside of “real user session detected”
+**Body:**
+```json
+{ "token": "string", "reason": "string" }
+```
+
+#### `POST /api/shares/end`
+Mark a share as ended.
+
+**Body:**
+```json
+{ "token": "string" }
+```
+
+#### `POST /api/shares/:token/block`
+Block a share token.
+
+---
+
+## Users
+
+#### `POST /api/users/lookup`
+Look up a user by email address. Used by the contacts flow to resolve an email to a `userId` before sending a trust request.
+
+**Auth:** Bearer token required
+
+**Body:**
+```json
+{ "email": "string" }
+```
+
+**Response (found):**
+```json
+{ "exists": true, "userId": "uuid", "displayName": "string | null", "email": "string" }
+```
+
+**Response (self):**
+```json
+{ "exists": true, "isSelf": true, "userId": "uuid", "email": "string" }
+```
+
+**Response (not found):**
+```json
+{ "exists": false }
+```
+
+---
+
+## Error Format
+
+All errors follow:
+```json
+{ "error": "string description" }
+```
+
+HTTP status codes: `400` bad input, `401` missing/invalid token, `403` forbidden, `404` not found, `429` rate limited, `500` server error.

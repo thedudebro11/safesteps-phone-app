@@ -1,159 +1,96 @@
-# SafeSteps – Tracking Logic
+# SafeSteps — Tracking Logic
 
+_See also: `docs/TRACKING_LOGIC.MD` for the full canonical V1 spec._
 
+---
 
 ## 1. Tracking Modes
 
-The app has three high-level tracking modes:
+Three modes managed by `TrackingProvider`:
 
-- `off`
-- `active`
-- `emergency`
-
-This mode should be managed in a central place (e.g., `TrackingProvider` or similar), so all screens can read the current state and react accordingly.
+- `idle` — no tracking, no timers running
+- `active` — periodic GPS pings, user-visible state
+- `emergency` — high-frequency pings, red UI, push alerts sent
 
 ---
 
 ## 2. Mode Behavior
 
-### 2.1 Mode: `off`
-
-**Definition:**
+### 2.1 Mode: `idle`
 
 - No periodic GPS calls running.
-- No periodic network calls running.
 - Location may be used only for:
   - One-time map centering on Home.
-  - One-shot operations (e.g., “Share my location once”).
-
-**Behavior:**
-
+  - One-shot operations (e.g., "Share my location once").
 - Tracking interval timers are stopped/cleared.
-- UI shows:
-  - Status: “Tracking is OFF.”
-  - Clear message that no live updates are being sent.
-
-**Battery impact:** Minimal.
+- UI: "Tracking is OFF."
 
 ---
 
 ### 2.2 Mode: `active`
 
-**Definition:**
+- User explicitly turned on "Live Tracking."
+- App periodically sends pings to `POST /api/locations`.
 
-- User has explicitly turned on “Live Tracking” via a toggle/button.
-- App periodically sends pings to the backend with `type = "normal"` and `source = "active_tracking"`.
+**Default interval (v1):** 30s (adjustable by tier).
 
-**Default interval (v1):**
+**Loop behavior (foreground):**
+1. Check location permission.
+2. If granted: get lat/lng/accuracy via `expo-location`.
+3. `POST /api/locations { lat, lng, accuracyM }`
+4. Wait `intervalMs`, repeat while `active` and app in foreground.
 
-- `30s` (can be adjusted later via settings).
-
-**Loop Behavior (foreground-only in v1):**
-
-1. Check if we have location permission.
-   - If not, prompt user to grant “While Using the App.”
-2. If granted:
-   - Call the OS location API (e.g., `expo-location`) to get:
-     - `lat`
-     - `lng`
-     - `accuracy` (if available)
-   - Call backend:
-     - `POST /api/locations`
-     - Body includes `type = "normal"` and `source = "active_tracking"`.
-3. Wait for `intervalMs` (e.g., 30,000 ms).
-4. Repeat while mode is `active` **and** app is in foreground.
-
-**Failure Handling:**
-
-- If location retrieval fails:
-  - Log in dev builds.
-  - Show a small non-blocking banner: “Unable to get location, will retry.”
-- If network call fails:
-  - Same banner: “Unable to send location, will retry.”
-
-**Stopping:**
-
-- User toggles tracking off.
-- App explicitly sets mode to `off` and cancels timers.
+**Stopping:** user toggles off → mode = `idle`, timers cleared.
 
 ---
 
 ### 2.3 Mode: `emergency`
 
-**Definition:**
+- User activated Emergency Mode.
+- Pings go to `POST /api/emergency` (writes `mode=emergency`).
+- `POST /api/emergency/alert` is called once to send push notifications to trusted contacts.
 
-- User has activated Emergency Mode via the red emergency button.
-- Pings are sent more frequently with `type = "emergency"` and `source = "emergency_mode"`.
+**Default interval (v1):** 10s.
 
-**Default interval (v1):**
-
-- `5–10s` (configurable; start with 10s for balance).
-
-**Activation Flow:**
-
-1. User taps **“Emergency Mode”**.
-2. Optionally show a confirmation:
-   - “Activate Emergency Mode? This will send more frequent emergency location updates.”
+**Activation flow:**
+1. User taps "Emergency Mode".
+2. `EmergencyRecipientsModal` selects recipients → creates emergency shares.
 3. Set mode to `emergency`.
-4. Immediately send one emergency ping:
-   - `POST /api/locations` with `type = "emergency"` and `source = "emergency_mode"`.
-5. Start emergency loop:
-   - Every `intervalMsEmergency` (e.g., 10s) do:
-     - Get GPS location.
-     - Send emergency ping.
+4. Immediately send one emergency ping: `POST /api/emergency`
+5. Call `POST /api/emergency/alert` to notify contacts.
+6. Start emergency loop at `intervalMsEmergency`.
 
-**UI Feedback:**
+**UI feedback:**
+- Red highlight, "Emergency Mode is ON."
+- Button switches to "Stop Emergency Mode."
 
-- Home screen clearly reflects emergency state:
-  - Red highlight around map or status card.
-  - Text like: “Emergency Mode is ON – sending frequent pings.”
-- Emergency button switches to “Stop Emergency Mode.”
-
-**Stopping:**
-
-- User taps “Stop Emergency Mode.”
-- Mode transitions:
-  - Either to `off`, or
-  - Back to `active` if we decide emergency is layered on top of active tracking.
-- All emergency timers are cleared.
+**Stopping:** user taps stop → mode → `idle`, timers cleared, emergency shares ended.
 
 ---
 
 ## 3. Permissions Model
 
-**Goal (v1):**
+**V1:** "While Using the App" location permission only.
 
-- Use **“While Using the App”** location permission.
-- Avoid forcing “Always Allow” for background tracking in v1.
-- Make SafeSteps feel user-controlled and battery-friendly.
+- First use: prompt for permission.
+- If denied: show "Location permission is required for tracking."
+- If revoked while tracking: stop loop, set mode to `idle`, show error.
 
-**Behavior:**
-
-- On first use of tracking:
-  - Prompt for “While Using the App” permission.
-- If denied:
-  - Show a clear message: “Location permission is required for tracking.”
-- If revoked while tracking is on:
-  - Stop the tracking loop.
-  - Set mode to `off`.
-  - Show an error state.
-
-Later versions (v2+) may optionally introduce background tracking with explicit explanations and opt-in.
+Background tracking (via `expo-task-manager`) is available via `src/lib/backgroundLocationTask.ts` but requires explicit user opt-in.
 
 ---
 
 ## 4. Interval Management
 
-All tracking intervals should be:
-
-- Managed in a single tracking logic module/provider.
-- Cleared when:
-  - Mode changes to `off`.
-  - App unmounts the tracking provider.
-- Configurable from a single config object, e.g.:
+All intervals are managed in `TrackingProvider`. They are cleared when:
+- Mode changes to `idle`
+- App unmounts the provider
+- User signs out
 
 ```ts
-export const TRACKING_INTERVALS = {
-  activeMs: 30000,
-  emergencyMs: 10000,
-};
+// Reference values
+TRACKING_INTERVALS = {
+  activeMs: 30_000,
+  emergencyMs: 10_000,
+}
+```

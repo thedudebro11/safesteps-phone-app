@@ -1,112 +1,146 @@
-# SafeSteps — Architecture & Structure (V1)
+# SafeSteps — Architecture & Folder Structure (V1)
 
-This document describes the **shipping** repo structure for SafeSteps V1 (Expo + Supabase-first).
+_Last updated: 2026-05-12_
 
 ---
 
-## 1) Tech Stack
+## 1. Tech Stack
 
-- **Expo (React Native)**
-- **Expo Router**
+- **Expo (React Native)** — mobile + web
+- **Expo Router** — file-based navigation
 - **TypeScript**
-- **Supabase** (Auth + Postgres + RLS)
-- Secure session persistence:
-  - **SecureStore** (iOS/Android)
-  - local storage fallback (web)
-
-Optional (only if/when needed):
-- Supabase **Edge Functions** (share viewer, rate limits, guest relay)
-- Node/Express service (later; not required to ship V1)
+- **Supabase** — Auth + Postgres + RLS
+- **Node/Express** — backend API (deployed on Railway)
 
 ---
 
-## 2) Routing & Navigation
+## 2. Routing & Navigation
 
 ### Route groups
-- `(auth)` — unauthenticated screens
-- `(tabs)` — main app (guest or authenticated)
+```
+app/
+  (auth)/       — unauthenticated screens
+  (tabs)/       — main app (authenticated)
+```
 
 ### Tabs (locked)
-- Home
-- Contacts
-- Shares
-- History
-- Settings
+- `home` — map + tracking
+- `contacts` — trust management
+- `shares` — active share sessions
+- `history` — location event log
+- `membership` — tier/upgrade screen
+- `settings` — account + privacy + logout
 
 ---
 
-## 3) Recommended Folder Structure
+## 3. Folder Structure
 
-```txt
+```
 app/
-  _layout.tsx                 # wraps app with AuthProvider
+  _layout.tsx                     # root layout: AuthProvider + navigation guard
   (auth)/
+    _layout.tsx
     login.tsx
     register.tsx
   (tabs)/
-    _layout.tsx               # bottom tab navigator
-    home.tsx                  # tracking + map
-    contacts.tsx              # manage contacts + start share for a contact
-    shares.tsx                # manage active share sessions
-    history.tsx               # location logs + location ping + directions
-    settings.tsx              # account + privacy + logout
+    _layout.tsx                   # bottom tab navigator
+    home.tsx                      # tracking + map (native entry)
+    home.web.tsx                  # web-specific home variant
+    contacts.tsx                  # trust requests + visibility toggles
+    shares.tsx                    # manage active share sessions
+    history.tsx                   # location history feed
+    membership.tsx                # tier upgrade screen
+    settings.tsx                  # account + sign out
 
-providers/
-  AuthProvider.tsx            # session + guest mode + auth actions
-  TrackingProvider.tsx        # single-timer tracking state machine (V1)
+src/
+  features/
+    auth/
+      AuthProvider.tsx            # session + auth actions (isGuest hardcoded false for now)
+    contacts/
+      ContactsProvider.tsx        # local contact state (server-backed via /api/trust/*)
+      types.ts
+    emergency/
+      EmergencyRecipientsModal.tsx
+    history/
+      useHistory.ts
+      types.ts
+    home/
+      MapFirstHomeScreen.native.tsx
+      MapFirstHomeScreen.web.tsx
+      components/
+        BottomActionDrawer.tsx    # safeRun() wraps all async press handlers here
+        DiscreteFrequencySlider.tsx
+        HomeActionSheet.tsx
+    map/
+      LiveMapCard.tsx
+      SharedMap.native.tsx
+      SharedMap.tsx
+      SharedMap.web.tsx
+      types.ts
+    shares/
+      SharesProvider.tsx          # share session lifecycle
+      emergencySync.ts            # shouldStopEmergencyAfterEndingShare()
+      types.ts
+    tracking/
+      TrackingProvider.tsx        # tracking state machine (idle/active/emergency)
+      BackgroundPermissionModal.tsx
+    trust/
+      useTrustedContacts.ts
+      types.ts
+  lib/
+    api.ts                        # getApiBaseUrl()
+    apiClient.ts                  # apiFetch(), ApiError, sendEmergencyAlert()
+    backgroundLocationTask.ts     # expo-task-manager background location
+    confirm.ts                    # cross-platform confirm dialog (Alert/window.confirm)
+    ids.ts                        # createId() — local ID generation
+    notify.ts                     # tryLocalNotify()
+    registerPushToken.ts          # Expo push token registration
+    sendEmergencyAlert.ts         # POST /api/emergency/alert wrapper
+    storage.ts                    # getStorage() — AsyncStorage/localStorage abstraction
+    supabase.ts                   # typed Supabase client
+    tiers.ts                      # getEmergencyRecipientLimit(), getTrustedContactLimit()
 
-lib/
-  supabase.ts                 # typed supabase client
-  storage.ts                  # secure storage abstraction (native/web)
-  geo.ts                      # geolocation helpers + reverse geocode wrappers
-  share.ts                    # share session helpers (create/revoke/copy)
+server/
+  index.js                        # Express app, inline routes (/api/locations, /api/emergency, shares)
+  middleware/
+    requireUser.js                # JWT validation + req.userId
+  routes/
+    emergency.js                  # POST /api/emergency/alert (push notifications)
+    history.js                    # GET /api/history
+    live.js                       # GET /api/live/visible
+    push.js                       # POST /api/push/register
+    trust.js                      # POST/GET /api/trust/*
+    users.js                      # /api/users/*
+    visibility.js                 # POST /api/visibility/set
+  lib/
+    history.js                    # insertHistoryEvent()
+    supabaseAdmin.js              # supabaseAdmin + supabaseAuth clients
+```
 
-types/
-  models.ts                   # shared types (Ping, Contact, ShareSession)
+---
 
-4) Data Flow (High Level)
+## 4. Data Flow (High Level)
 
-Home reads real-time location + tracking state from TrackingProvider.
+**Tracking:**  
+`TrackingProvider` → `POST /api/locations` or `POST /api/emergency` → upsert `live_presence` + append `location_history`
 
-TrackingProvider writes pings to:
+**Live map:**  
+`MapFirstHomeScreen` polls `GET /api/live/visible` → filters by trust + visibility + presence expiry
 
-local store (guest)
+**Trust:**  
+`ContactsProvider` / contacts screen → `/api/trust/*` → `trusted_contacts` table
 
-Supabase (location_pings) when authenticated
+**History:**  
+History screen → `GET /api/history` → `location_history` table
 
-Contacts creates a share session for a selected trusted contact.
+**Emergency alerts:**  
+Client triggers → `POST /api/emergency/alert` → resolves trusted contacts → sends via Expo Push API
 
-Shares lists active share sessions and revokes/ends them.
+---
 
-History lists pings (local for guest, Supabase for authenticated) and provides:
+## 5. Key Design Decisions
 
-“Location Ping” (focus map to that point)
-
-“Directions” (open external maps app)
-
-5) Security Defaults
-
-Secrets are never in the app bundle:
-
-Supabase anon key in app (allowed)
-
-service role keys only server-side (Edge Function / backend)
-
-All DB access is enforced by RLS.
-
-Share links use high-entropy tokens and store token hashes, not raw tokens.
-
-### Emergency Mode State Coordination
-
-Emergency mode is coordinated across multiple providers:
-
-- TrackingProvider controls tracking state (`idle`, `active`, `emergency`)
-- SharesProvider controls share session lifecycle
-
-To avoid async state race conditions:
-- The app determines whether an action will end the final emergency share **before** mutating share state.
-- Emergency mode is disabled only when the final emergency share is removed.
-
-This pattern prevents stale UI and ensures cross-screen consistency.
-
-
+- **No Supabase direct client writes from the app for trust/visibility/history.** Everything goes through the Express API so permission enforcement stays server-side.
+- **Feature providers vs. local-first vs. server-backed:** Contacts and shares providers manage local state and sync to the server. This keeps the UI decoupled from network state.
+- **`safeRun()`** in `BottomActionDrawer.tsx` wraps all async press handlers to prevent silent failures on mobile networks. See `ENGINEERING_INVARIANTS.md #11`.
+- **Platform variants:** `.native.tsx` / `.web.tsx` suffixes are used for map components and home screen where native and web behavior diverge.

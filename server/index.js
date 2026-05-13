@@ -1,6 +1,7 @@
 // server/index.js
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
+
 const { historyRouter } = require("./routes/history");
 const { insertHistoryEvent } = require("./lib/history");
 const { usersRouter } = require("./routes/users");
@@ -9,74 +10,50 @@ const { visibilityRouter } = require("./routes/visibility");
 const { liveRouter } = require("./routes/live");
 const { pushRouter } = require("./routes/push");
 const { emergencyRouter } = require("./routes/emergency");
+const { sharesRouter, validateGuestShareToken } = require("./routes/shares");
+const { validate, schemas } = require("./lib/validate");
 const express = require("express");
 const cors = require("cors");
 const { supabaseAdmin, supabaseAuth } = require("./lib/supabaseAdmin");
+
+const isDev = String(process.env.NODE_ENV || "development").toLowerCase() !== "production";
+
 const app = express();
 
-console.log("[env]", {
-  SUPABASE_URL: !!process.env.SUPABASE_URL,
-  SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
-  SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-});
+// ── CORS ─────────────────────────────────────────────────────────────────────
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : ["http://localhost:8081", "http://localhost:3000", "http://localhost:19006"];
 
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow non-browser clients (curl, mobile app, Expo Go native)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+  })
+);
 
-
-
-
-app.use(cors());
 app.use(express.json());
+
+// ── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api/users", usersRouter);
 app.use("/api/trust", trustRouter);
 app.use("/api/visibility", visibilityRouter);
 app.use("/api/live", liveRouter);
 app.use("/api/history", historyRouter);
 app.use("/api/push", pushRouter);
-// Handles POST /api/emergency/alert only.
-// POST /api/emergency (location ping) remains inline below — unchanged.
 app.use("/api/emergency", emergencyRouter);
+app.use("/api/shares", sharesRouter);
 
-async function checkSupabase() {
-  try {
-    const { error } = await supabaseAdmin
-      .from("profiles")
-      .select("user_id")
-      .limit(1);
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-    if (error) throw error;
-
-    console.log("✅ Supabase connection OK");
-  } catch (err) {
-    console.error("❌ Supabase connection FAILED");
-    console.error(err.message);
-  }
-}
-
-checkSupabase();
-
-
-// Set REQUIRE_AUTH=true if you want to force auth even in dev.
-const REQUIRE_AUTH = String(process.env.REQUIRE_AUTH || "").toLowerCase() === "true";
-
-/**
- * In-memory dev store (fine for local).
- * Later swap with DB tables.
- */
-const sharesByToken = new Map(); // token -> { token, status, blocked, reason, createdAt, endedAt }
-const lastPingByKey = new Map(); // key -> timestampMs
-
-function requireBearer(req, res, next) {
-  if (!REQUIRE_AUTH) return next(); // dev default: allow
-
-  const auth = req.headers.authorization || "";
-  const ok = auth.startsWith("Bearer ") && auth.length > "Bearer ".length;
-  if (!ok) return res.status(401).json({ error: "Missing Bearer token" });
-  next();
-}
-
-function getAuthHeader(req) {
-  return (req.headers.authorization || "").trim();
-}
+// In-memory rate limiter (per key). Limits rapid duplicate pings from same user.
+// Keys reset on restart; this is acceptable — the goal is accidental spam prevention.
+const lastPingByKey = new Map();
 
 function rateLimitByKey(key, minSeconds) {
   const now = Date.now();
@@ -84,49 +61,19 @@ function rateLimitByKey(key, minSeconds) {
   const minMs = minSeconds * 1000;
 
   if (now - last < minMs) {
-    const waitMs = minMs - (now - last);
-    return { ok: false, waitMs };
+    return { ok: false, waitMs: minMs - (now - last) };
   }
 
   lastPingByKey.set(key, now);
   return { ok: true };
 }
 
-function requireGuestShare(req, res, { minSeconds }) {
-  const auth = getAuthHeader(req);
-  const { isGuest, shareToken } = req.body || {};
-
-  // If Authorization exists, treat as authed path (skip guest gating)
-  if (auth && auth.startsWith("Bearer ")) {
-    return { ok: true, mode: "authed" };
-  }
-
-  // Guest path: must prove an active share exists
-  if (!isGuest || !shareToken) {
-    return res.status(403).json({ error: "share_required" });
-  }
-
-  const share = sharesByToken.get(shareToken);
-  if (!share || share.status !== "live") {
-    return res.status(403).json({ error: "invalid_share" });
-  }
-  if (share.blocked) {
-    return res.status(403).json({ error: "share_blocked" });
-  }
-
-  // Rate limit by shareToken (and optionally IP backstop)
-  const rl = rateLimitByKey(`share:${shareToken}`, minSeconds);
-  if (!rl.ok) {
-    return res.status(429).json({ error: "rate_limited", waitMs: rl.waitMs });
-  }
-
-  return { ok: true, mode: "guest", share };
+function getAuthHeader(req) {
+  return (req.headers.authorization || "").trim();
 }
 
-app.get("/health", (req, res) => res.json({ ok: true }));
-
 async function getUserIdFromBearer(req) {
-  const auth = (req.headers.authorization || "").trim();
+  const auth = getAuthHeader(req);
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
   if (!token) return null;
 
@@ -156,124 +103,90 @@ async function upsertLivePresence({ userId, lat, lng, accuracyM, mode }) {
   if (error) throw new Error(error.message);
 }
 
+// ── Health ────────────────────────────────────────────────────────────────────
+app.get("/health", (req, res) => res.json({ ok: true }));
 
+// ── Location ping (active tracking) ─────────────────────────────────────────
+app.post("/api/locations", validate(schemas.latLng), async (req, res) => {
+  const auth = getAuthHeader(req);
 
-/**
- * Register a share token as "live".
- * Client should call this right after createShareForContact() creates a token.
- */
-app.post("/api/shares/start", (req, res) => {
-  const { token, reason } = req.body || {};
-  if (!token || typeof token !== "string") {
-    return res.status(400).json({ error: "missing_token" });
+  if (auth && auth.startsWith("Bearer ")) {
+    const userId = await getUserIdFromBearer(req);
+    if (!userId) return res.status(401).json({ error: "Invalid token" });
+
+    const rl = rateLimitByKey(`loc:${userId}`, 10);
+    if (!rl.ok) return res.status(429).json({ error: "rate_limited", waitMs: rl.waitMs });
+
+    const { lat, lng, accuracyM } = req.body;
+    await upsertLivePresence({ userId, lat, lng, accuracyM, mode: "active" });
+    await insertHistoryEvent({ userId, lat, lng, accuracyM, mode: "active" });
+    return res.json({ ok: true, accepted: true, mode: "authed" });
   }
 
-  const existing = sharesByToken.get(token);
-  const next = existing
-    ? { ...existing, status: "live", blocked: false, reason: reason || existing.reason }
-    : { token, status: "live", blocked: false, reason: reason || "manual", createdAt: new Date().toISOString() };
+  // Guest path: validate share token against DB
+  const { shareToken } = req.body || {};
+  const result = await validateGuestShareToken(req, res, shareToken);
+  if (!result.ok) return;
 
-  sharesByToken.set(token, next);
-  return res.json({ ok: true, share: next });
+  return res.json({ ok: true, accepted: true, mode: "guest" });
 });
 
-app.post("/api/presence/stop", requireBearer, async (req, res) => {
-  console.log("✅ presence stop route loaded");
-  console.log("[presence/stop] hit", {
-    hasAuth: !!req.headers.authorization,
-    requireAuth: REQUIRE_AUTH,
-  });
+// ── Emergency location ping ──────────────────────────────────────────────────
+app.post("/api/emergency", validate(schemas.latLng), async (req, res) => {
+  const auth = getAuthHeader(req);
 
+  if (auth && auth.startsWith("Bearer ")) {
+    const userId = await getUserIdFromBearer(req);
+    if (!userId) return res.status(401).json({ error: "Invalid token" });
+
+    const rl = rateLimitByKey(`emergency:${userId}`, 5);
+    if (!rl.ok) return res.status(429).json({ error: "rate_limited", waitMs: rl.waitMs });
+
+    const { lat, lng, accuracyM } = req.body;
+    await upsertLivePresence({ userId, lat, lng, accuracyM, mode: "emergency" });
+    await insertHistoryEvent({ userId, lat, lng, accuracyM, mode: "emergency" });
+    return res.json({ ok: true, accepted: true, mode: "authed" });
+  }
+
+  const { shareToken } = req.body || {};
+  const result = await validateGuestShareToken(req, res, shareToken);
+  if (!result.ok) return;
+
+  return res.json({ ok: true, accepted: true, mode: "guest" });
+});
+
+// ── Presence stop ────────────────────────────────────────────────────────────
+app.post("/api/presence/stop", async (req, res) => {
   const auth = getAuthHeader(req);
   if (!auth || !auth.startsWith("Bearer ")) {
-    console.log("[presence/stop] noop (no bearer)");
     return res.json({ ok: true, noop: true });
   }
 
   const userId = await getUserIdFromBearer(req);
-  console.log("[presence/stop] user", { userId: userId ? "ok" : "null" });
-
+  if (!userId) return res.json({ ok: true, noop: true });
 
   const { error } = await supabaseAdmin.from("live_presence").delete().eq("user_id", userId);
-  console.log("[presence/stop] delete", { ok: !error, error: error?.message });
+  if (error) {
+    console.error("[presence/stop] delete error:", error.message);
+  }
 
   return res.json({ ok: true });
 });
 
-app.post("/api/shares/end", (req, res) => {
-  const { token } = req.body || {};
-  if (!token) return res.status(400).json({ error: "missing_token" });
-
-  const share = sharesByToken.get(token);
-  if (!share) return res.status(404).json({ error: "not_found" });
-
-  const ended = { ...share, status: "ended", endedAt: new Date().toISOString() };
-  sharesByToken.set(token, ended);
-  return res.json({ ok: true, share: ended });
-});
-
-app.post("/api/shares/:token/block", (req, res) => {
-  const token = req.params.token;
-  const share = sharesByToken.get(token);
-  if (!share) return res.status(404).json({ error: "not_found" });
-
-  const blocked = { ...share, blocked: true };
-  sharesByToken.set(token, blocked);
-  return res.json({ ok: true, share: blocked });
-});
-
-app.post("/api/locations", async (req, res) => {
-  const auth = getAuthHeader(req);
-
-  // Authed path: write live_presence
-  if (auth && auth.startsWith("Bearer ")) {
-    const userId = await getUserIdFromBearer(req);
-    if (!userId) return res.status(401).json({ error: "Invalid token" });
-
-    const { lat, lng, accuracyM } = req.body || {};
-    if (typeof lat !== "number" || typeof lng !== "number") {
-      return res.status(400).json({ error: "lat/lng required" });
-    }
-
-    await upsertLivePresence({ userId, lat, lng, accuracyM, mode: "active" });
-    await insertHistoryEvent({ userId, lat, lng, accuracyM, mode: "active" });
-    return res.status(200).json({ ok: true, accepted: true, mode: "authed" });
+// ── Startup ───────────────────────────────────────────────────────────────────
+async function checkSupabase() {
+  try {
+    const { error } = await supabaseAdmin.from("profiles").select("user_id").limit(1);
+    if (error) throw error;
+    if (isDev) console.log("✅ Supabase connection OK");
+  } catch (err) {
+    console.error("❌ Supabase connection FAILED:", err.message);
   }
+}
 
-  // Guest path (existing behavior)
-  const gate = requireGuestShare(req, res, { minSeconds: 60 });
-  if (!gate || gate.ok !== true) return;
-
-  return res.status(200).json({ ok: true, accepted: true, mode: gate.mode });
-});
-
-
-app.post("/api/emergency", async (req, res) => {
-  const auth = getAuthHeader(req);
-
-  if (auth && auth.startsWith("Bearer ")) {
-    const userId = await getUserIdFromBearer(req);
-    if (!userId) return res.status(401).json({ error: "Invalid token" });
-
-    const { lat, lng, accuracyM } = req.body || {};
-    if (typeof lat !== "number" || typeof lng !== "number") {
-      return res.status(400).json({ error: "lat/lng required" });
-    }
-
-    await upsertLivePresence({ userId, lat, lng, accuracyM, mode: "emergency" });
-    await insertHistoryEvent({ userId, lat, lng, accuracyM, mode: "emergency" });
-    return res.status(200).json({ ok: true, accepted: true, mode: "authed" });
-  }
-
-  const gate = requireGuestShare(req, res, { minSeconds: 30 });
-  if (!gate || gate.ok !== true) return;
-
-  return res.status(200).json({ ok: true, accepted: true, mode: gate.mode });
-});
-
+checkSupabase();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Lume dev API listening on http://localhost:${PORT}`);
-  console.log(`   REQUIRE_AUTH=${REQUIRE_AUTH ? "true" : "false"}`);
+  console.log(`✅ Lume API listening on port ${PORT}`);
 });

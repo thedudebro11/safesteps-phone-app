@@ -2,32 +2,16 @@
 const { Router } = require("express");
 const { requireUser } = require("../middleware/requireUser");
 const { supabaseAdmin } = require("../lib/supabaseAdmin");
+const { validate, schemas } = require("../lib/validate");
 
 const visibilityRouter = Router();
 
-function parseBooleanStrict(value) {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") {
-    const v = value.trim().toLowerCase();
-    if (v === "true") return true;
-    if (v === "false") return false;
-  }
-  if (typeof value === "number") {
-    if (value === 1) return true;
-    if (value === 0) return false;
-  }
-  return null; // invalid
-}
-
 // POST /api/visibility/set { viewerUserId, canView }
-visibilityRouter.post("/set", requireUser, async (req, res) => {
+visibilityRouter.post("/set", requireUser, validate(schemas.visibilitySet), async (req, res) => {
   try {
-    const viewerUserId = String(req.body?.viewerUserId ?? "").trim();
-    const canView = parseBooleanStrict(req.body?.canView);
+    const { viewerUserId, canView } = req.body;
 
-    if (!viewerUserId) return res.status(400).json({ error: "viewerUserId is required" });
     if (viewerUserId === req.userId) return res.status(400).json({ error: "viewerUserId cannot be self" });
-    if (canView === null) return res.status(400).json({ error: "canView must be a boolean" });
 
     // Enforce trust accepted
     const trust = await supabaseAdmin

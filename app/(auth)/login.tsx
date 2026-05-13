@@ -28,7 +28,7 @@ const PRINCIPLES = [
 ] as const;
 
 export default function LoginScreen() {
-  const { signInWithEmail, isAuthActionLoading } = useAuth();
+  const { signInWithEmail, startGuestSession, isAuthActionLoading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -113,6 +113,14 @@ export default function LoginScreen() {
             disabled={disableAuthButtons}
           >
             <Text style={styles.secondaryButtonText}>Create an account</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.guestButton, disableAuthButtons && styles.disabled]}
+            onPress={() => void startGuestSession()}
+            disabled={disableAuthButtons}
+          >
+            <Text style={styles.guestButtonText}>Continue as Guest</Text>
           </Pressable>
         </View>
 
@@ -224,6 +232,18 @@ const styles = StyleSheet.create({
     color: ACCENT,
     fontSize: 14,
     fontWeight: "600",
+  },
+  guestButton: {
+    marginTop: 4,
+    borderRadius: 999,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guestButtonText: {
+    color: MUTED,
+    fontSize: 14,
+    fontWeight: "500",
   },
   disabled: { opacity: 0.6 },
 });

@@ -11,6 +11,7 @@ import { createId } from "@/src/lib/ids";
 import type { Contact, CreateContactInput } from "./types";
 import { getTrustedContactLimit } from "@/src/lib/tiers";
 import { useAuth } from "@/src/features/auth/AuthProvider";
+import { usePremium } from "@/src/features/premium/PremiumProvider";
 
 type ContactsContextValue = {
   contacts: Contact[];
@@ -45,9 +46,7 @@ export function ContactsProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
 
   const { isGuest } = useAuth();
-
-
-  const isPremium = false; // wire later
+  const { isPremium } = usePremium();
 
   useEffect(() => {
     (async () => {

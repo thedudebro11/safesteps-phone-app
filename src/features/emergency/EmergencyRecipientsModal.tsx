@@ -10,6 +10,8 @@ import {
   Platform,
 } from "react-native";
 import type { Contact } from "@/src/features/contacts/types";
+import { useAuth } from "@/src/features/auth/AuthProvider";
+import { router } from "expo-router";
 
 const CARD_BG = "#0c1020";
 const BORDER = "#1a2035";
@@ -32,6 +34,7 @@ export function EmergencyRecipientsModal({
   onCancel,
   onConfirm,
 }: Props) {
+  const { isGuest } = useAuth();
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -79,6 +82,33 @@ export function EmergencyRecipientsModal({
     maxSelectable >= 10
       ? `Select up to ${maxSelectable}`
       : `Select up to ${maxSelectable}`;
+
+  if (isGuest) {
+    return (
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+        <View style={styles.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
+          <View style={[styles.card, { gap: 16 }]}>
+            <Text style={styles.title}>Emergency mode</Text>
+            <Text style={{ color: MUTED, fontSize: 13, lineHeight: 20 }}>
+              Emergency mode requires a free account. Create one to protect yourself and notify trusted contacts.
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
+              <Pressable onPress={onCancel} style={[styles.btn, styles.btnGhost]}>
+                <Text style={styles.btnGhostText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => { onCancel(); router.push("/(auth)/register"); }}
+                style={[styles.btn, { borderColor: ACCENT, backgroundColor: "rgba(56,150,255,0.12)" }]}
+              >
+                <Text style={{ color: "#fff", fontWeight: "900" }}>Create Account</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   return (
     <Modal

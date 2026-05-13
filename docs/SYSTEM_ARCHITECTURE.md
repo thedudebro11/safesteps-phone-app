@@ -1,340 +1,234 @@
-Here you go — a **drop-in `docs/SYSTEM_ARCHITECTURE.md`** written in first person, with clear diagrams + contracts + the exact flows you’ve built so far.
-
-Create this file:
-
-`docs/SYSTEM_ARCHITECTURE.md`
-
-Paste this:
-
-```md
 # SafeSteps / Lume — System Architecture
 
-This document describes how SafeSteps (Lume) works end-to-end, from the mobile app to the backend and database.
+_Last updated: 2026-05-12_
 
-My goal is to keep the system easy to reason about, privacy-first, and stable as features expand.
+This document describes how SafeSteps works end-to-end, from the mobile app to the backend and database.
 
 ---
 
-## 1) High-Level Overview
+## 1. High-Level Overview
 
-SafeSteps / Lume is a privacy-first GPS safety app built around a strict principle:
+SafeSteps is a privacy-first GPS safety app built around one principle:
 
-**Visibility without surveillance**.
+**Visibility without surveillance.**
 
 Users are only visible live when they explicitly enable tracking, and they disappear quickly when tracking stops.
 
-The system is made of three main layers:
+Three main layers:
 
 1. **Mobile app (Expo / React Native)** — collects location, renders the map, manages tracking state
-2. **Backend API (Node / Express)** — validates auth, enforces visibility rules, writes presence/history
-3. **Supabase (Postgres + Auth)** — stores data and enforces RLS policies
+2. **Backend API (Node / Express on Railway)** — validates auth, enforces visibility rules, writes presence/history
+3. **Supabase (Postgres + Auth)** — stores data, enforces RLS policies
 
 ---
 
-## 2) Architecture Diagram
+## 2. Architecture Diagram
 
 ```
-
 ┌───────────────────────────┐
 │        Mobile App          │
 │   Expo + React Native      │
-│   - TrackingProvider       │
 │   - AuthProvider           │
+│   - TrackingProvider       │
+│   - SharesProvider         │
+│   - ContactsProvider       │
 │   - MapFirstHomeScreen     │
 │   - History Screen         │
 └──────────────┬────────────┘
-│ HTTPS (Bearer JWT)
-▼
+               │ HTTPS (Bearer JWT)
+               ▼
 ┌───────────────────────────┐
 │        Express API         │
-│   Node.js + Express        │
+│   Node.js on Railway       │
 │   - requireUser middleware │
 │   - /api/locations         │
 │   - /api/emergency         │
-│   - /api/live/visible      │
+│   - /api/emergency/alert   │
 │   - /api/presence/stop     │
 │   - /api/history           │
 │   - /api/trust/*           │
-│   - /api/visibility/*      │
+│   - /api/visibility/set    │
+│   - /api/live/visible      │
+│   - /api/push/register     │
+│   - /api/shares/*          │
 └──────────────┬────────────┘
-│ Supabase Admin + Queries
-▼
+               │ Supabase Admin + Queries
+               ▼
 ┌───────────────────────────┐
 │          Supabase          │
-│ Postgres + Auth + RLS      │
-│ Tables:                    │
-│ - live_presence            │
-│ - location_history         │
-│ - trusted_contacts         │
-│ - live_visibility          │
-│ - profiles                 │
+│  Postgres + Auth + RLS     │
+│  Tables:                   │
+│  - profiles                │
+│  - trusted_contacts        │
+│  - live_presence           │
+│  - live_visibility         │
+│  - location_history        │
+│  - push_tokens             │
+│  - emergency_alerts        │
 └───────────────────────────┘
-
 ```
 
 ---
 
-## 3) Mobile App Modules
+## 3. Mobile App Modules
 
-### 3.1 AuthProvider
+### 3.1 AuthProvider (`src/features/auth/AuthProvider.tsx`)
 - Manages Supabase auth session + token lifecycle
-- Exposes current user + access token to the app
-- Ensures all protected server routes use:
-  `Authorization: Bearer <access_token>`
+- Upserts `profiles` row on every session load
+- Registers Expo push token once per distinct user on login
+- Exposes `isAuthenticated`, `user`, `session`, `isAuthActionLoading`
+- All protected server routes use: `Authorization: Bearer <access_token>`
 
-### 3.2 TrackingProvider
+### 3.2 TrackingProvider (`src/features/tracking/TrackingProvider.tsx`)
 Tracking state machine:
-
 ```
-
 idle → active → idle
 idle → emergency → idle
 active → emergency → idle
-
 ```
-
-Responsibilities:
 - Requests location permission
 - Gets location fixes via `expo-location`
-- Sends pings to the server
-- Stops pings + clears presence when tracking ends
+- Sends pings to `/api/locations` (active) or `/api/emergency` (emergency)
+- Calls `/api/presence/stop` when tracking ends
+- Stopping active tracking ends all live shares (`SharesProvider.endAllLiveShares()`)
 
-### 3.3 MapFirstHomeScreen (map-first UI)
-Responsibilities:
+### 3.3 SharesProvider (`src/features/shares/SharesProvider.tsx`)
+- Manages share session lifecycle
+- Syncs with server via `/api/shares/start` and `/api/shares/end`
+- Emergency shares (`reason: "emergency"`) are ended when emergency tracking stops
+
+### 3.4 ContactsProvider (`src/features/contacts/ContactsProvider.tsx`)
+- Manages local contact state
+- Backed by server trust system (`/api/trust/*`)
+
+### 3.5 MapFirstHomeScreen (native / web variants)
 - Renders the map + user dot
-- Polls visible trusted users via `/api/live/visible`
-- Shows markers for trusted contacts who are currently live
-- Uses boosted polling for near real-time presence without websockets
+- Polls `/api/live/visible` on an interval for trusted contacts who are live
+- Boost polling: 1s intervals for 12 seconds after tracking starts or visible count changes
 
-### 3.4 History Screen
-Responsibilities:
-- Fetches location history via `/api/history`
-- Uses silent auto refresh to avoid UI blinking
-- Renders newest-first event feed
+### 3.6 History Screen
+- Fetches from `/api/history`
+- Silent auto-refresh while focused (no loading flicker)
+- Newest-first event feed
 
 ---
 
-## 4) Backend API Layer
+## 4. Backend API
 
-The backend exists for one reason:
+The backend enforces privacy and permission rules server-side. The client cannot be trusted to decide what it can see.
 
-**Enforce privacy + permission rules server-side**.
-
-The client can never be trusted to enforce who can see what.
-
-### 4.1 Authentication enforcement
-All protected routes go through:
-
-- `requireUser` middleware
-- Validates Supabase JWT
+### 4.1 Authentication
+All protected routes use `requireUser` middleware (`server/middleware/requireUser.js`):
+- Validates Supabase JWT via `supabaseAuth.auth.getUser(token)`
 - Sets `req.userId`
 
-If `REQUIRE_AUTH=true`, requests must include a valid Bearer token.
+### 4.2 Route Modules
+| Module | File | Handles |
+|---|---|---|
+| Locations | `server/index.js` | `/api/locations`, `/api/emergency`, `/api/presence/stop` |
+| Trust | `server/routes/trust.js` | `/api/trust/*` |
+| Visibility | `server/routes/visibility.js` | `/api/visibility/set` |
+| Live | `server/routes/live.js` | `/api/live/visible` |
+| History | `server/routes/history.js` | `/api/history` |
+| Push | `server/routes/push.js` | `/api/push/register` |
+| Emergency alerts | `server/routes/emergency.js` | `/api/emergency/alert` |
+| Shares | `server/index.js` | `/api/shares/*` (in-memory) |
 
 ---
 
-## 5) Database Model
+## 5. Core Data Flows
 
-### 5.1 live_presence (ephemeral)
-Purpose:
-- Represents live location when tracking is enabled
-- Must disappear quickly when tracking stops
-
-Key fields:
-
-- `user_id` (unique)
-- `lat`, `lng`
-- `mode` (`active` | `emergency`)
-- `expires_at`
-
-Presence lifecycle:
-
-- Upsert on every ping
-- `expires_at = now + 90 seconds`
-- Deleted immediately on `/api/presence/stop`
-
----
-
-### 5.2 location_history (append-only events)
-Purpose:
-- Records past pings (optional UI feature, but very useful)
-- Never mutated
-
-Key fields:
-
-- `id`
-- `user_id`
-- `lat`, `lng`, `accuracy_m`
-- `mode`
-- `created_at`
-
----
-
-### 5.3 trusted_contacts
-Purpose:
-- Defines who I trust / have a relationship with
-
-Key fields:
-
-- `requester_user_id`
-- `requested_user_id`
-- `status` (`pending` | `accepted` | `denied`)
-
-Accepted trust becomes reciprocal (two directional accepted rows).
-
----
-
-### 5.4 live_visibility (directional permission)
-Purpose:
-- Controls visibility on the map
-- Owner decides whether viewer can see them
-
-Key fields:
-
-- `owner_user_id`
-- `viewer_user_id`
-- `can_view` boolean
-
-Meaning:
-- If owner sets `can_view=false`, viewer will not see them live even if trust exists.
-
----
-
-### 5.5 profiles
-Purpose:
-- Attach identity to user markers and contact list
-
-Fields used:
-- `user_id`
-- `email`
-- `display_name`
-
----
-
-## 6) Core Data Flows
-
-### 6.1 Active Tracking Ping
-
+### 5.1 Active Tracking Ping
 ```
-
 TrackingProvider
-└─ POST /api/locations { lat, lng, accuracyM, mode:"active" }
-├─ requireUser → userId
-├─ upsert live_presence (expires_at now+90s)
-└─ insert location_history (append-only)
-
+└─ POST /api/locations { lat, lng, accuracyM }
+   ├─ requireUser → userId
+   ├─ upsert live_presence (mode=active, expires_at=now+90s)
+   └─ insert location_history (mode=active, append-only)
 ```
 
-Result:
-- User becomes visible live (if visibility + trust allow it)
-
----
-
-### 6.2 Emergency Ping
-
+### 5.2 Emergency Ping
 ```
-
 TrackingProvider
-└─ POST /api/emergency { lat, lng, accuracyM, mode:"emergency" }
-├─ requireUser → userId
-├─ upsert live_presence mode=emergency (expires_at now+90s)
-└─ insert location_history mode=emergency
-
+└─ POST /api/emergency { lat, lng, accuracyM }
+   ├─ requireUser → userId
+   ├─ upsert live_presence (mode=emergency, expires_at=now+90s)
+   └─ insert location_history (mode=emergency, append-only)
 ```
 
-Result:
-- User is visible live as EMERGENCY
-
----
-
-### 6.3 Stop Tracking (instant disappearance)
-
+### 5.3 Emergency Alert (push notifications)
+```
+Client triggers emergency
+└─ POST /api/emergency/alert
+   ├─ requireUser → senderId
+   ├─ dedup check (emergency_alerts, 90s window)
+   ├─ resolve trusted contacts (both trust directions)
+   ├─ fetch push_tokens for recipients
+   ├─ send via Expo Push API (chunked, max 100/request)
+   └─ insert emergency_alerts record
 ```
 
+### 5.4 Stop Tracking
+```
 TrackingProvider stopAll()
 └─ POST /api/presence/stop
-├─ requireUser → userId
-└─ delete live_presence where user_id = userId
-
+   ├─ requireUser → userId
+   └─ delete live_presence where user_id = userId
 ```
+User disappears from all other maps within the next poll cycle.
 
-Result:
-- User disappears immediately from other maps
-
----
-
-### 6.4 Live Visibility Query
-
+### 5.5 Live Visibility Query
 ```
-
 MapFirstHomeScreen polling loop
 └─ GET /api/live/visible
-├─ requireUser → viewerId
-├─ query live_presence where expires_at > now()
-├─ join live_visibility where owner allows viewer
-├─ join trusted_contacts where accepted
-└─ attach profiles (display_name/email)
-
+   ├─ requireUser → viewerId
+   ├─ live_presence where expires_at > now()
+   ├─ live_visibility where owner allows viewer (can_view=true)
+   ├─ trusted_contacts where accepted (requester=viewer, requested=owner)
+   └─ attach profiles (display_name, email)
 ```
 
-Result:
-- Viewer receives only trusted + permitted live users
-
----
-
-### 6.5 History Query
-
+### 5.6 History Query
 ```
-
 History screen
 └─ GET /api/history?from=&to=&mode=
-├─ requireUser → userId
-└─ returns newest-first pings
-
+   ├─ requireUser → userId
+   └─ location_history newest-first, limit 200
 ```
 
-History refresh behavior:
-- Auto-refresh while focused (silent)
-- Manual refresh triggers non-silent reload
+---
+
+## 6. Polling Strategy
+
+WebSockets are intentionally avoided in V1.
+
+Hybrid polling on `/api/live/visible`:
+- **Base interval:** 5 seconds
+- **Boost window:** 12 seconds at 1-second intervals, triggered when:
+  - Tracking turns ON
+  - Visible user count changes
+- `inFlightRef` guard prevents overlapping requests
+- Polling disabled when user is not authenticated or tracking is idle
 
 ---
 
-## 7) Polling + Near Real-Time Strategy
+## 7. Design Principles
 
-I intentionally avoided websockets for V1.
-
-Instead, I use a hybrid polling strategy:
-
-- Normal polling: every 5 seconds
-- Boost window polling: every 1 second for 12 seconds after:
-  - tracking starts
-  - visible user count changes
-
-This makes visibility feel near real-time without the complexity of realtime subscriptions.
-
----
-
-## 8) Design Principles
-
-The system is guided by these principles:
-
-- Presence is ephemeral
-- History is append-only
-- The server enforces permissions
-- Emergency overrides everything
-- Polling should be state-aware
-- Background refresh must be silent
-- Privacy is the top priority
+- **Presence is ephemeral** — expires in 90s, deleted instantly on stop
+- **History is append-only** — never mutated
+- **Server enforces permissions** — client never decides visibility
+- **Emergency overrides everything** — highest priority mode
+- **Polling is state-aware** — no unnecessary requests
+- **Background refresh is silent** — no loading spinners on auto-refresh
+- **Privacy first** — no analytics SDKs, no silent tracking
 
 See: `docs/ENGINEERING_INVARIANTS.md`
 
 ---
 
-## 9) Next planned upgrades
+## 8. Planned Upgrades
 
-- Push notifications for emergency mode
-- Shareable safety sessions (time-limited live sharing)
-- Background tracking (expo-task-manager)
-- Optional: Supabase realtime presence (only if it preserves strict permission enforcement)
-```
-
+- Guest mode (see `docs/AUTH_FLOW.md` Part 2 for full spec)
+- DB-backed share sessions (replace in-memory Map)
+- Persistent rate limiting (replace in-memory map with Redis/DB)
+- Supabase Realtime as an optional drop-in (only if strict permission enforcement is preserved)

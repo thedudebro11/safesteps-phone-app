@@ -2,7 +2,6 @@
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -13,6 +12,9 @@ import {
 } from "react-native";
 import { useTrustedContacts } from "@/src/features/trust/useTrustedContacts";
 import type { IncomingTrustRequest, TrustedContact } from "@/src/features/trust/types";
+import { useAuth } from "@/src/features/auth/AuthProvider";
+import { usePremium } from "@/src/features/premium/PremiumProvider";
+import { getTrustedContactLimit } from "@/src/lib/tiers";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const BG = "#050814";
@@ -202,8 +204,14 @@ export default function TrustedScreen() {
     denyRequest,
   } = useTrustedContacts();
 
+  const { isGuest } = useAuth();
+  const { isPremium } = usePremium();
+  const contactLimit = getTrustedContactLimit({ isGuest, isPremium });
+  const atLimit = contacts.length >= contactLimit;
+
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [inlineMsg, setInlineMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const sortedIncoming = useMemo(
     () => [...incoming].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
@@ -212,11 +220,16 @@ export default function TrustedScreen() {
 
   // ── Handlers — logic unchanged ──────────────────────────────────────────────
 
+  function showMsg(type: "success" | "error", text: string) {
+    setInlineMsg({ type, text });
+    setTimeout(() => setInlineMsg(null), 4000);
+  }
+
   async function onToggleShare(c: TrustedContact) {
     try {
       await setShareEnabled(c.userId, !c.shareEnabled);
     } catch (e: any) {
-      Alert.alert("Could not update visibility", e?.message ?? "Try again.");
+      showMsg("error", e?.message ?? "Could not update visibility.");
     }
   }
 
@@ -229,20 +242,20 @@ export default function TrustedScreen() {
       const lookup = await lookupUserByEmail(e);
 
       if (!lookup.exists) {
-        Alert.alert("Not found", "That email is not registered yet.");
+        showMsg("error", "That email is not registered yet.");
         return;
       }
 
       if ("isSelf" in lookup && lookup.isSelf) {
-        Alert.alert("That's you", "You can't add yourself.");
+        showMsg("error", "You can't add yourself.");
         return;
       }
 
       await sendTrustRequest(lookup.userId);
       setEmail("");
-      Alert.alert("Request sent", `Trust request sent to ${lookup.email}.`);
+      showMsg("success", `Trust request sent to ${lookup.email}.`);
     } catch (e2: any) {
-      Alert.alert("Could not send request", e2?.message ?? "Try again.");
+      showMsg("error", e2?.message ?? "Could not send request.");
     } finally {
       setBusy(false);
     }
@@ -252,9 +265,9 @@ export default function TrustedScreen() {
     setBusy(true);
     try {
       await acceptRequest(id);
-      Alert.alert("Accepted", "You are now trusted.");
+      showMsg("success", "Request accepted.");
     } catch (e: any) {
-      Alert.alert("Could not accept", e?.message ?? "Try again.");
+      showMsg("error", e?.message ?? "Could not accept.");
     } finally {
       setBusy(false);
     }
@@ -265,7 +278,7 @@ export default function TrustedScreen() {
     try {
       await denyRequest(id);
     } catch (e: any) {
-      Alert.alert("Could not deny", e?.message ?? "Try again.");
+      showMsg("error", e?.message ?? "Could not deny.");
     } finally {
       setBusy(false);
     }
@@ -303,6 +316,24 @@ export default function TrustedScreen() {
             <Text style={styles.bannerDangerText}>{errorMsg}</Text>
           </View>
         ) : null}
+
+        {/* ── Inline action feedback ──────────────────────────────────────── */}
+        {inlineMsg ? (
+          <View style={inlineMsg.type === "error" ? styles.bannerDanger : styles.bannerSuccess}>
+            <Text style={styles.bannerDangerText}>{inlineMsg.text}</Text>
+          </View>
+        ) : null}
+
+        {/* ── Tier limit banner ──────────────────────────────────────────── */}
+        {atLimit && (
+          <View style={styles.bannerLimit}>
+            <Text style={styles.bannerLimitText}>
+              {isGuest
+                ? `Guest limit: ${contactLimit} contact. Create a free account for more.`
+                : `Contact limit reached (${contactLimit}). Upgrade to Premium for more.`}
+            </Text>
+          </View>
+        )}
 
         {/* ── Loading ──────────────────────────────────────────────────────── */}
         {isLoading && (
@@ -378,10 +409,10 @@ export default function TrustedScreen() {
               />
               <Pressable
                 onPress={onAddByEmail}
-                disabled={busy || !email.trim()}
+                disabled={busy || !email.trim() || atLimit}
                 style={[
                   styles.sendBtn,
-                  (busy || !email.trim()) && { opacity: 0.45 },
+                  (busy || !email.trim() || atLimit) && { opacity: 0.45 },
                 ]}
               >
                 <Text style={styles.sendBtnText}>Send</Text>
@@ -424,6 +455,21 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   bannerDangerText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  bannerSuccess: {
+    borderWidth: 1,
+    borderColor: "rgba(52,211,153,0.4)",
+    backgroundColor: "rgba(52,211,153,0.10)",
+    borderRadius: 14,
+    padding: 12,
+  },
+  bannerLimit: {
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.4)",
+    backgroundColor: "rgba(251,191,36,0.08)",
+    borderRadius: 14,
+    padding: 12,
+  },
+  bannerLimitText: { color: "#fbbf24", fontWeight: "700", fontSize: 13 },
 
   // ── Loading
   loadingWrap: { alignItems: "center", paddingVertical: 32, gap: 10 },

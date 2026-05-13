@@ -3,6 +3,8 @@ import React, { useCallback } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
+  Platform,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -80,6 +82,20 @@ function Pill({
   );
 }
 
+// Opens the device's native maps app for directions to a coordinate
+function openDirections(lat: number, lng: number) {
+  const nativeUrl = Platform.select({
+    ios: `maps:0,0?q=${lat},${lng}`,
+    android: `geo:${lat},${lng}?q=${lat},${lng}`,
+  });
+  const fallback = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  if (nativeUrl) {
+    void Linking.openURL(nativeUrl).catch(() => void Linking.openURL(fallback));
+  } else {
+    void Linking.openURL(fallback);
+  }
+}
+
 // ─── Entry card ───────────────────────────────────────────────────────────────
 // One ping per card. Mode badge leads; timestamp trails; coordinates are secondary.
 function EntryCard({ item }: { item: HistoryItem }) {
@@ -111,6 +127,16 @@ function EntryCard({ item }: { item: HistoryItem }) {
         {coordLabel}
         {accuracyLabel}
       </Text>
+
+      {/* Action row: Directions button */}
+      <View style={styles.entryActions}>
+        <Pressable
+          onPress={() => openDirections(item.lat, item.lng)}
+          style={styles.directionsBtn}
+        >
+          <Text style={styles.directionsBtnText}>Directions</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -402,6 +428,18 @@ const styles = StyleSheet.create({
 
   // Coordinates: clearly tertiary — darkest muted shade
   entryCoords: { color: "#4a5578", fontSize: 11, fontWeight: "600" },
+
+  // Action row + Directions button
+  entryActions: { flexDirection: "row", marginTop: 6, gap: 8 },
+  directionsBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(56,150,255,0.35)",
+    backgroundColor: "rgba(56,150,255,0.08)",
+  },
+  directionsBtnText: { color: ACCENT, fontSize: 11, fontWeight: "800" },
 
   // ── Empty state
   centeredState: {

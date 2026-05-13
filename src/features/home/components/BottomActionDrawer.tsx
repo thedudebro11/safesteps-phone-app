@@ -19,6 +19,21 @@ type Props = {
     tabBarHeight: number;
 };
 
+// Signal quality label + color derived from GPS accuracy
+function signalState(accuracyM: number | null): { label: string; color: string } {
+    if (accuracyM === null || accuracyM > 150) return { label: "Dead", color: "#ff3b4e" };
+    if (accuracyM > 50) return { label: "Spotty", color: "#fbbf24" };
+    return { label: "Active", color: "#34d399" };
+}
+
+// Relative age of last fix
+function fmtAge(tsMs: number): string {
+    const sec = Math.round((Date.now() - tsMs) / 1000);
+    if (sec < 5) return "Just now";
+    if (sec < 60) return `${sec}s ago`;
+    return `${Math.floor(sec / 60)}m ago`;
+}
+
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
 }
@@ -30,6 +45,7 @@ export default function BottomActionDrawer({ tabBarHeight }: Props) {
     const {
         mode,
         frequencySec,
+        lastFix,
         setFrequency,
         startActive,
         stopActive,
@@ -298,6 +314,33 @@ export default function BottomActionDrawer({ tabBarHeight }: Props) {
                         </Pressable>
                     )}
 
+                    {/* ─── Last-fix info (lat/lng + accuracy + signal) ─── */}
+                    {/* Only shown when actively tracking and a fix exists */}
+                    {!isIdle && lastFix && (
+                        <View style={styles.fixCard}>
+                            {(() => {
+                                const sig = signalState(lastFix.accuracyM);
+                                const coordStr = `${lastFix.lat.toFixed(5)}, ${lastFix.lng.toFixed(5)}`;
+                                const accStr = lastFix.accuracyM != null
+                                    ? `±${Math.round(lastFix.accuracyM)}m`
+                                    : "—";
+                                return (
+                                    <>
+                                        <View style={styles.fixRow}>
+                                            <View style={[styles.fixSignalDot, { backgroundColor: sig.color }]} />
+                                            <Text style={[styles.fixSignalLabel, { color: sig.color }]}>
+                                                {sig.label}
+                                            </Text>
+                                            <Text style={styles.fixAccuracy}>{accStr}</Text>
+                                            <Text style={styles.fixAge}>{fmtAge(lastFix.timestampMs)}</Text>
+                                        </View>
+                                        <Text style={styles.fixCoords}>{coordStr}</Text>
+                                    </>
+                                );
+                            })()}
+                        </View>
+                    )}
+
                     {/* Step 11: Frequency slider — hidden in emergency (locked at 30s) */}
                     {!isEmergency && (
                         <View style={styles.section}>
@@ -490,6 +533,49 @@ const styles = StyleSheet.create({
         color: "#ff3b4e",
         fontSize: 14,
         fontWeight: "800",
+    },
+
+    // Last-fix info card
+    fixCard: {
+        backgroundColor: "#0c1020",
+        borderColor: "#1a2035",
+        borderWidth: 1,
+        borderRadius: 14,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        marginBottom: 10,
+        gap: 4,
+    },
+    fixRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+    fixSignalDot: {
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+    },
+    fixSignalLabel: {
+        fontSize: 12,
+        fontWeight: "800",
+        flex: 1,
+    },
+    fixAccuracy: {
+        color: "#a6b1cc",
+        fontSize: 11,
+        fontWeight: "700",
+    },
+    fixAge: {
+        color: "#4a5578",
+        fontSize: 11,
+        fontWeight: "600",
+    },
+    fixCoords: {
+        color: "#4a5578",
+        fontSize: 11,
+        fontWeight: "600",
+        paddingLeft: 13,
     },
 
     // Frequency slider section

@@ -1,292 +1,159 @@
-# SafeSteps – Changelog
-
-All notable changes to this project will be documented in this file.
-
-Format: Keep a running **[Unreleased]** section, and cut releases when versions are tagged.
-
----
-
-## [Unreleased]
-
-### Added
-- Initial Expo + React Native + Expo Router setup
-- Tab navigation (Home, Contacts, History, Settings)
-- Auth stack (login, register)
-- Supabase client + environment configuration
-- AuthProvider + useAuth with session persistence
-- Settings screen with account info and logout
-- Global route protection to send unauthenticated users to `/login` and active sessions (user or guest) to `/home`.
-- “Create an account” button on the login screen linking to the register flow.
-
-### Changed
-- “Added Home Welcome card showing session identity (guest vs signed in).”
-- Defined v1 share link model: recipient-scoped links with expiration and on/off; guest sharing uses ephemeral server relay (minimum live snapshot, deleted on end).
-
-### Fixed
-- Logout / Exit Guest Mode from the Settings screen now reliably clears auth/guest state and redirects back to `/login` on web and native.
-
----
-
-
-
-## [0.1.0] – (pre-v1 internal)
-> Placeholder for first internal milestone.
-- Project initialized
-
 # SafeSteps — Changelog
 
-All notable changes to this project will be documented in this file.
+_Last updated: 2026-05-12_
 
-Format: Maintain **[Unreleased]**, cut releases when versions are tagged.
+> **Note for agents:** This is a historical record. Early entries describe architecture that has since been replaced. Key changes to be aware of:
+> - **Guest mode**: early entries describe guest mode as implemented. It is NOT currently implemented (`isGuest` is hardcoded `false`). See `docs/AUTH_FLOW.md` Part 2 for the build spec.
+> - **Local-first contacts**: early entries describe a local-first contacts/shares provider. This was replaced by the server-backed trust system (`/api/trust/*`). Current architecture: `docs/architecture/STRUCTURE.md`.
+> - **`hasSession`**: referenced in early entries as a real exported value. It is NOT currently exported from `AuthProvider`. The current routing gate is `isAuthenticated` only.
+> - **`router.replace` after logout**: early entries show this pattern. Current pattern: screens mutate auth state only; `_layout.tsx` handles all redirects. See `docs/AUTH_FLOW.md` section 1.3.
 
 ---
 
 ## [Unreleased]
 
+### Added (2026-05-12 — Production Build Pass)
+- **Guest mode fully implemented** — `startGuestSession()` / `endGuestSession()` in AuthProvider, persistent guest flag via `readGuestFlag()` / `writeGuestFlag()`, `onAuthStateChange` fixed to not clear guest on SIGNED_OUT
+- **`isGuest` stub removed** — `isGuest` now correctly derived from real `guestMode` state
+- **`isPremium` stub removed** — wired to `PremiumProvider.usePremium()`, hardcode gone from `ContactsProvider`
+- **`PremiumProvider`** created at `src/features/premium/PremiumProvider.tsx` — RevenueCat stub, ready to wire
+- **Membership screen** — full tier comparison table (Guest/Free/Premium), CTA, restore purchases
+- **`_layout.tsx`** routing updated to use `hasSession` (accepts both authenticated users and guests)
+- **"Continue as Guest"** button added to login screen
+- **Emergency mode gated on `!isGuest`** — shows account creation prompt for guests
+- **Settings screen** rebuilt — display name edit, subscription section, privacy policy + ToS links, app version
+- **Contacts screen** — inline tier limit banner replaces Alert.alert for limit errors, inline success/error feedback
+- **ErrorBoundary** component at `src/components/ErrorBoundary.tsx`, wraps all tab screens
+- **Backend Zod validation** — all routes now use `validate()` middleware from `server/lib/validate.js`
+- **DB-backed share sessions** — `server/routes/shares.js` replaces in-memory Map, SHA-256 token hashing
+- **`POST /api/users/profile`** — update display name endpoint
+- **`GET /api/shares/active`** and **`GET /api/shares/:token/status`** endpoints added
+- **CORS hardened** — `ALLOWED_ORIGINS` allowlist in production
+- **Rate limiting** on `/api/locations` (10s) and `/api/emergency` (5s) for authenticated users
+- **`stopAll()`** exposed from `useTracking()` context
+- **`app.json`** cleaned up — dark theme, deduped permissions, correct splash background `#050814`, iOS `bundleIdentifier` set
+- **`eas.json`** updated — `autoIncrement: true` for production, `cli.version >= 7.0.0`, submit config
+
 ### Added
-- Locked V1 UI/UX structure and screen responsibilities:
-  - Home (tracking + map only)
-  - Contacts (trusted contacts + start share per contact)
-  - Shares (active share session management)
-  - History (logs + map focus + directions)
-  - Settings (account + privacy)
-- New tab: **Shares**
-- Home primary action renamed: **“Ping Now” → “Share Live Location”** (funnels to Contacts)
-- History per-entry actions:
-  - `Location Ping` (focus map to ping)
-  - `Directions` (open external maps app chooser)
-- Share entry points:
-  - Home → Contacts
-  - Shares → Contacts
-
-### Changed
-- V1 philosophy tightened: **session-based, consent-driven**; no silent tracking
-- Emergency mode defined as:
-  - distinct state (`EMERGENCY`)
-  - red labeling
-  - account-only
-  - sends to all trusted contacts
-  - overrides active tracking
-- Documentation updated to reflect tier rules, signal state semantics, and share session model.
-
-### Fixed
-- (No new fixes logged)
+- Emergency push notifications (`POST /api/emergency/alert` → Expo Push API)
+- Push token registration (`POST /api/push/register`, `push_tokens` table)
+- Emergency alert deduplication (90s window via `emergency_alerts` table)
+- Background location task wiring (`src/lib/backgroundLocationTask.ts`)
 
 ---
 
-## [0.1.0] — pre-v1 internal
-- Project initialized
-
-
-## [Unreleased]
-### Added
-- Local-first Contacts + Shares domain layer (Context providers)
-- Storage adapter (web localStorage, native AsyncStorage, fallback in-memory)
-- Shares tab + sessions UI
-- Cross-platform confirm helper for web/native destructive actions
-
-# Changelog
-
-## Unreleased
-
-### Fixed
-- Emergency mode now stays in sync across Home / Contacts / Shares:
-  - Stopping the last emergency share from Contacts or Shares stops Emergency on Home.
-  - Stopping Emergency on Home ends all emergency shares everywhere.
-
-### Added
-- Emergency recipient picker polish:
-  - Enforces selection limit (guest = 1)
-  - Clear UI copy + selection count
-  - Tap-outside-to-close behavior without stealing touches inside modal
-
-### Updated
-- Trusted Contacts limit now enforced centrally by ContactsProvider using tier rules.
-  - Contacts screen relies on provider enforcement (prevents UI/logic mismatch).
-
-
-- Fix: stopping Active Tracking now ends live share sessions (prevents Contacts showing SHARING after tracking stops)
-
-
-
-## [V1 Milestone] - Live Visibility System Complete
+## [V1 Milestone] — Live Visibility System Complete
 
 ### Added
 - Authenticated live presence system (Supabase JWT validated)
-- Bidirectional trust + visibility controls
-- Expiring live_presence model (90s TTL)
-- Secure /api/live/visible endpoint
-- In-app live polling (5s interval)
-- Dual-account automated integration test
-- REQUIRE_AUTH hardened production mode
+- Bidirectional trust + visibility controls (`trusted_contacts`, `live_visibility` tables)
+- Expiring `live_presence` model (90s TTL)
+- `GET /api/live/visible` — filtered by trust + visibility + expiry
+- In-app live polling (5s base, 1s boost for 12s)
+- `POST /api/presence/stop` — immediate presence deletion on tracking stop
+- Dual-account automated integration test (`scripts/live-visibility-test.mjs`)
+- `REQUIRE_AUTH` hardened production mode
 
 ### Security
-- Bearer token required for all visibility endpoints
-- No guest live visibility
+- Bearer token required for all visibility/trust endpoints
 - Visibility is owner-controlled per trusted user
+- Server enforces all permission checks (client cannot bypass)
 
-Status: Stable
+---
 
-## 2026-02-22 — Milestone: Authenticated Live Visibility (V1)
-
-### Added
-- Trusted contacts system (request/accept/deny + list)
-- Visibility permissions per trusted contact (owner -> viewer)
-- Live presence storage with expiry window (~90s)
-- Live visibility endpoint filtered by trust + visibility + expiry
-- Trusted UI (add by email, incoming requests, instant toggles)
-- Map polling for /api/live/visible to show contacts live in-app
-- Automated dual-account integration test script
-
-### Changed
-- AuthProvider contract + routing gates updated
-- Tracking now posts authed location updates to server when logged in
-
-### Security
-- REQUIRE_AUTH=true support (Supabase JWT validation)
-- Server-side enforcement of trust + visibility rules (client cannot bypass)
-
-## 2026-03-03 — Presence OFF delay fixed (instant stop)
+## 2026-03-03 — Presence OFF Delay Fixed (Instant Stop)
 
 ### Problem
-Active Tracking would turn ON quickly, but turning OFF could take up to ~1–2 minutes before other devices stopped showing the user as "live".
+Active Tracking OFF could take up to ~2 minutes to reflect on other devices.
 
 ### Root Cause
-Presence was effectively TTL-based:
-- `live_presence` rows are upserted with `expires_at = now + 90s`.
-- When tracking stops, if we do not explicitly clear presence, other viewers continue to see the last presence row until it expires.
+`live_presence` rows relied on TTL expiration when tracking stopped. The explicit `/api/presence/stop` route was returning 404 because the route wasn't registered — server needed a restart.
 
-### Fix Implemented
-1) Added an explicit server endpoint to clear presence immediately:
-- `POST /api/presence/stop`
-- Auth required when `REQUIRE_AUTH=true`
-- Deletes `live_presence` row for the authenticated `user_id`
+### Fix
+- Restarted Express server to register the route
+- `TrackingProvider.stopAll()` now calls `stopPresence()` → `POST /api/presence/stop`
+- Presence deletion is immediate (row deleted, not TTL-expired)
+- Boosted polling (1s for 12s) makes the change visible near-instantly
 
-2) Client now calls stop endpoint whenever tracking stops:
-- `TrackingProvider.stopAll()` calls `stopPresence()` before ending shares
-- This makes OFF idempotent and immediate (deletes derived state)
+---
 
-3) UI responsiveness improvement:
-- Home map uses boosted polling for 12 seconds after tracking mode toggles
-- Poll interval: 1s during boost, 5s normally
-- In-flight guard prevents overlapping fetches
+## [Milestone] — History Tab (V1 Complete)
 
-### Debugging Discovery
-Client logs showed stop requests returning:
-- `404 Cannot POST /api/presence/stop`
-
-This proved the app was calling the endpoint correctly, but the running Express server did not have the new route loaded.
-
-### Final Resolution
-Restarted the Express API server (`npm run api`). After restart, server logs confirmed:
-- route loaded
-- requests hit
-- user validated
-- delete executed successfully
-
-### Verification
-- Start tracking: other device sees marker quickly.
-- Stop tracking: marker disappears quickly (poll-driven, boosted to near-instant).
-- Crash/force-close still falls back to TTL cleanup (presence expires naturally).
-
-
-## [Unreleased] – Live Visibility Responsiveness Upgrade
-
-### Improved
-- I implemented immediate presence stop propagation by fixing the `/api/presence/stop` route and restarting the server to properly register the route.
-- I eliminated stale presence delays that were caused by a 404 route misregistration.
-- I implemented boost polling logic when tracking turns ON to make visibility feel near-instant.
-- I added overlap protection to prevent concurrent `/api/live/visible` requests.
-- I stopped unnecessary polling when tracking is idle.
-- I added a short high-frequency polling window (12 seconds @ 1s interval) after tracking starts.
-- I optimized visible user count changes to temporarily boost polling.
+### Added
+- `location_history` Supabase table (id, user_id, lat, lng, accuracy_m, mode, created_at)
+- Server writes history events from `POST /api/locations` and `POST /api/emergency`
+- `GET /api/history` endpoint (from/to/mode filters, newest-first, limit 200)
+- History UI screen (`app/(tabs)/history.tsx`)
+- Silent auto-refresh while focused (no loading flicker)
+- `buildRange()` logic moved inside fetch function so `to` timestamp never freezes
+- History test script (`scripts/history-test.mjs`)
 
 ### Fixed
-- Presence OFF state previously took up to ~2 minutes to reflect due to server route not being registered.
-- Fixed polling loop overlapping requests under slow network conditions.
-- Removed redundant boost logic that caused unnecessary polling.
-
-### Performance
-- Active tracking visibility now reflects in ~1 second under normal network conditions.
-- Presence stop is now effectively immediate.
-
-
-#### History Tab Not Updating Without Filter Change
-
-I discovered that the History tab would stop updating unless the **Today** filter was clicked again.
-
-Root cause:
-
-The history query string was computed using `useMemo`, which meant the `to` timestamp was frozen until filters changed.
-
-Example problem pattern:
-
-
-useMemo(() => {
-const to = new Date().toISOString()
-}, [filters])
-
-
-This caused refresh requests to repeatedly fetch the same time window.
-
-Fix implemented:
-
-- Moved the `buildRange()` logic inside the fetch function so `to` is recomputed on every request.
-- Added a **silent refresh mode** to prevent UI blinking.
-- Implemented stable `FlatList` keys to prevent row repaint issues.
-
-Result:
-
-- Refresh now fetches the correct time window.
-- The History list updates automatically.
-- UI updates smoothly without the entire screen flashing.
+- History tab stopped updating unless filter was changed — root cause: `to` timestamp was frozen in `useMemo`. Fixed by recomputing on every fetch.
 
 ---
 
-### Improved
+## [Milestone] — Emergency/Share Sync
 
-#### Silent Auto Refresh For History
+### Added
+- `emergencySync.ts` — `shouldStopEmergencyAfterEndingShare()` helper
+- Emergency mode now stays in sync across Home / Contacts / Shares:
+  - Stopping the last emergency share from Contacts or Shares stops Emergency on Home
+  - Stopping Emergency on Home ends all emergency shares everywhere
+- Emergency recipient picker: enforces tier limit (guest = 1), clear UI copy
 
-I added a background refresh system for the History tab.
-
-Behavior:
-
-- History refreshes automatically while the screen is focused.
-- Refresh interval depends on tracking mode.
-
-Intervals:
-
-
-Active / Emergency tracking → 6 seconds
-Idle mode → 30 seconds
-
-
-Refresh uses a **silent fetch** so loading states are not triggered during polling.
-
-This prevents the UI from blinking while still keeping the event log up to date.
-
-
-refetch({ silent: true })
-
-
-Manual refresh still performs a full reload.
+### Fixed
+- Stopping Active Tracking now ends live share sessions (prevents Contacts showing SHARING after tracking stops)
+- `TrackingProvider.stopAll()` captures previous mode; calls `endAllLiveShares()` if previous mode was `active` or `emergency`
 
 ---
 
-### UI Improvements
+## [Milestone] — Boot Reconciliation
 
-#### Stable FlatList Keys
+### Fixed
+- Stale "live" shares persisting after app restart (mobile only):
+  - `SharesProvider` rehydrates from AsyncStorage on boot
+  - `TrackingProvider` always boots in `idle` mode
+  - Boot reconciliation: if shares are loaded + tracking is idle + any shares are `live` → end them all immediately
+  - Guards: `hydratedOnceRef` (SharesProvider), `bootReconciledRef` (TrackingProvider)
 
-History entries now use stable keys to prevent row flicker:
+---
 
+## [Milestone] — Home Screen Map-First UI
 
-keyExtractor={(it) => String(it.id)}
+### Added
+- `MapFirstHomeScreen.native.tsx` — map as base layer
+- `BottomActionDrawer.tsx` — height-animated free-drag drawer (no snap)
+  - Bottom edge permanently anchored to tab bar via `bottom: tabBarHeight`
+  - Height animated between `COLLAPSED_H` and `MAX_HEIGHT` (not translateY)
+  - `PanResponder` attached to handle zone only (no gesture conflicts with slider)
+  - Drawer always starts collapsed; reliable after hot reload
+- Ping frequency slider (discrete steps, battery impact label)
 
+---
 
-Fallback key protection was also added for safety.
+## Early Development (Pre-V1)
 
-Result:
+### Added
+- Initial Expo + React Native + Expo Router setup
+- Tab navigation (Home, Contacts, Shares, History, Settings)
+- Auth stack (login, register)
+- Supabase client + environment configuration
+- `AuthProvider` + `useAuth` with session persistence
+- Settings screen with account info and logout
+- `confirm()` cross-platform helper (`src/lib/confirm.ts`) — `window.confirm` on web, `Alert.alert` on native
 
-- smoother scrolling
-- no row swapping
-- consistent rendering
+### Changed
+- V1 philosophy locked: **session-based, consent-driven**; no silent tracking
+- Emergency mode defined: distinct state, red labeling, account-only, overrides active tracking
+- History entries use stable `keyExtractor={(item) => String(item.id)}`
+
+### Fixed
+- CORS: added `http://localhost:8081` to Supabase Auth URL configuration
+- Expo Router TS errors after route group restructure: resolved with `npx expo start -c`
+- Server won't start: `npm run api` loads `server/.env`, not `.env.local` — service role key must be in `server/.env`
+
+---
+
+## [0.1.0] — Pre-V1 Internal
+- Project initialized

@@ -395,22 +395,27 @@ If used:
 
 ## 10. Database (Supabase / Postgres, V1 Tables)
 
-Planned core tables:
+Shipped tables:
 
-* `trusted_contacts`
-* `location_pings`
-* `share_sessions`
-* `share_recipients` (or `share_tokens`)
+* `profiles` — user identity (`user_id`, `email`, `display_name`)
+* `trusted_contacts` — bidirectional trust (`requester_user_id`, `requested_user_id`, `status`)
+* `live_presence` — ephemeral live location (expires 90s after last ping)
+* `live_visibility` — directional map visibility permission (`owner_user_id`, `viewer_user_id`, `can_view`)
+* `location_history` — append-only ping log (`user_id`, `lat`, `lng`, `accuracy_m`, `mode`, `created_at`)
+* `push_tokens` — Expo push tokens for emergency alerts
+* `emergency_alerts` — alert send audit log (dedup, recipient count)
 
 Key column concepts:
 
-* `location_pings.mode` = `normal | emergency`
-* `location_pings.source` = `user | share`
-* `location_pings.shared_to_contact_id` (nullable)
-* `share_sessions.status` = `active | paused | revoked | expired`
-* `share_sessions.expires_at`
+* `location_history.mode` = `active | emergency`
+* `live_presence.mode` = `active | emergency`
+* `live_presence.expires_at` = now() + 90s (upserted on every ping)
+* `live_visibility.can_view` = boolean (owner grants viewer visibility)
+* `trusted_contacts.status` = `pending | accepted | denied`
 
-All user-owned rows scoped by `user_id` with RLS.
+Share sessions are currently in-memory only. Planned: `share_sessions` + `share_recipients` tables.
+
+All user-owned rows scoped by `user_id` with RLS. See `docs/db/DB_SCHEMA.md` for full schema.
 
 ---
 
@@ -485,33 +490,29 @@ If you want, I can also generate a **diff-style “What changed vs your current 
 
 ## Auth Modes (Supabase + Guest)
 
-SafeSteps supports two modes:
+> **Current state:** Only authenticated mode is implemented. Guest mode is fully specced but not yet built (`isGuest` is hardcoded `false`). See `docs/AUTH_FLOW.md` Part 2 for the implementation plan.
 
-### 1) Authenticated (Supabase)
+SafeSteps is designed to support two modes:
+
+### 1) Authenticated (Supabase) — IMPLEMENTED
 - `user` exists
 - `session` exists (access_token available)
 - `isAuthenticated = true`
-- `hasSession = true`
+- Routing gate: `isAuthenticated` in `_layout.tsx`
 
-### 2) Guest Mode (local-first)
+### 2) Guest Mode — PLANNED (not yet built)
 - No Supabase user
 - `guestMode = true`
 - `isGuest = guestMode && !user`
-- `hasSession = isGuest || isAuthenticated`
-- Guest state is persisted using a "guest flag" so guest survives reloads.
+- `hasSession = isGuest || isAuthenticated` (replaces bare `isAuthenticated` as the routing gate)
+- Guest state persisted via `GUEST_FLAG_KEY = "safesteps_guest"` (localStorage / AsyncStorage)
+- Guest is restored on app start if no Supabase session AND guest flag is set
 
-### Key Rule
+### Key implementation rule (for when guest mode is built)
 **Never let Supabase SIGNED_OUT events automatically disable guest mode.**
-Supabase auth events can fire during transitions (especially when starting guest mode and calling `supabase.auth.signOut()`), so guest state must be treated as independent and higher-priority during guest start.
+`supabase.auth.signOut()` fires inside `startGuestSession()`, which triggers `onAuthStateChange(SIGNED_OUT)`. The listener must NOT clear `guestMode` when `newSession` is null — only clear it when a real user session comes in.
 
-### Guest Persistence
-Guest mode uses a shared key:
-- `GUEST_FLAG_KEY = "safesteps_guest"`
-- Web: `localStorage`
-- Native: `AsyncStorage`
-
-Guest is restored on app start if:
-- No Supabase user session exists AND guest flag is set.
+Full implementation spec: `docs/AUTH_FLOW.md` Part 2.
 
 UI + Tracking Synchronization Update (Live Map & Scrolling Fix)
 

@@ -1,3 +1,9 @@
+# SafeSteps — Developer Journal
+
+> **Note for agents:** This is a structured developer journal from early in the project. The issues documented here are all resolved. Treat it as historical context — for current architecture, see `docs/SYSTEM_ARCHITECTURE.md` and `docs/AUTH_FLOW.md`.
+
+---
+
 # SafeSteps — Issue Log & Developer Journal
 
 This file documents **every problem, debugging session, root cause analysis, and solution** encountered while building SafeSteps.

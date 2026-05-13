@@ -2,6 +2,7 @@
 const { Router } = require("express");
 const { requireUser } = require("../middleware/requireUser");
 const { supabaseAdmin } = require("../lib/supabaseAdmin");
+const { validate, schemas } = require("../lib/validate");
 
 const pushRouter = Router();
 
@@ -14,23 +15,9 @@ const pushRouter = Router();
  *
  * Body: { expoToken: string, platform: "ios" | "android" }
  */
-pushRouter.post("/register", requireUser, async (req, res) => {
+pushRouter.post("/register", requireUser, validate(schemas.pushRegister), async (req, res) => {
   try {
-    const { expoToken, platform } = req.body ?? {};
-
-    if (!expoToken || typeof expoToken !== "string") {
-      return res.status(400).json({ error: "expoToken is required" });
-    }
-
-    if (!platform || !["ios", "android"].includes(platform)) {
-      return res.status(400).json({ error: "platform must be 'ios' or 'android'" });
-    }
-
-    // Expo push tokens always start with "ExponentPushToken["
-    if (!expoToken.startsWith("ExponentPushToken[")) {
-      return res.status(400).json({ error: "Invalid Expo push token format" });
-    }
-
+    const { expoToken, platform } = req.body;
     const now = new Date().toISOString();
 
     const { error } = await supabaseAdmin
@@ -50,7 +37,7 @@ pushRouter.post("/register", requireUser, async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    console.log("[push/register] registered token", { userId: req.userId, platform });
+    if (process.env.NODE_ENV !== "production") console.log("[push/register] registered token", { userId: req.userId, platform });
     return res.json({ ok: true });
   } catch (e) {
     console.error("[push/register] unexpected error:", e?.message ?? e);

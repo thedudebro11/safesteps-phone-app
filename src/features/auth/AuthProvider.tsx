@@ -3,16 +3,36 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/src/lib/supabase";
 import { registerPushToken } from "@/src/lib/registerPushToken";
+import { readJson, writeJson } from "@/src/lib/storage";
+
+const GUEST_FLAG_KEY = "safesteps_guest";
+
+async function readGuestFlag(): Promise<boolean> {
+  try {
+    const val = await readJson<boolean>(GUEST_FLAG_KEY, false);
+    return val === true;
+  } catch {
+    return false;
+  }
+}
+
+async function writeGuestFlag(on: boolean): Promise<void> {
+  await writeJson(GUEST_FLAG_KEY, on).catch(() => {});
+}
 
 type AuthContextValue = {
   user: User | null;
   session: Session | null;
   isAuthenticated: boolean;
   isGuest: boolean;
+  hasSession: boolean;
+  isAuthLoaded: boolean;
   isAuthActionLoading: boolean;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  startGuestSession: () => Promise<void>;
+  endGuestSession: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -20,12 +40,10 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [guestMode, setGuestMode] = useState(false);
   const [isAuthActionLoading, setIsAuthActionLoading] = useState(false);
   const [isHydrating, setIsHydrating] = useState(true);
 
-  // Push token registration — fire once per distinct authenticated user.
-  // Tracks the last user ID for which we attempted registration so that session
-  // token refreshes (same user, new JWT) don't trigger unnecessary re-registrations.
   const registeredForUserId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -34,25 +52,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (registeredForUserId.current === userId) return;
 
     registeredForUserId.current = userId;
-    // Best-effort, non-blocking. registerPushToken never throws.
     void registerPushToken();
   }, [user?.id]);
 
-  // Initial session hydration (from AsyncStorage/web localStorage via supabase client config)
   useEffect(() => {
     let mounted = true;
 
     (async () => {
       try {
         const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error("[Auth] getSession error:", error);
-        }
+        if (error) console.error("[Auth] getSession error:", error);
         if (!mounted) return;
 
         const nextSession = data?.session ?? null;
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
+
+        // Only restore guest flag if there is no real session
+        if (!nextSession) {
+          const storedGuest = await readGuestFlag();
+          if (storedGuest) setGuestMode(true);
+        }
       } catch (e) {
         console.error("[Auth] getSession threw:", e);
       } finally {
@@ -60,12 +80,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })();
 
-    // Subscribe to auth changes
     const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
+      // Only clear guest mode when a real authenticated user appears — NOT on SIGNED_OUT
+      if (nextSession?.user) {
+        setGuestMode(false);
+        void writeGuestFlag(false);
+      }
     });
-    
+
     return () => {
       mounted = false;
       sub?.subscription?.unsubscribe();
@@ -77,11 +101,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
-      // Note: depending on Supabase email confirmation settings,
-      // user may need to confirm via email before session is active.
     } catch (e) {
       console.error("[Auth] signUpWithEmail error:", e);
-      // Keep UX simple; you can swap to a toast/banner later
       alert(e instanceof Error ? e.message : "Sign up failed");
     } finally {
       setIsAuthActionLoading(false);
@@ -104,9 +125,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setIsAuthActionLoading(true);
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      // onAuthStateChange will handle clearing session/user
+      await supabase.auth.signOut();
+      setGuestMode(false);
+      await writeGuestFlag(false);
     } catch (e) {
       console.error("[Auth] signOut error:", e);
       alert(e instanceof Error ? e.message : "Sign out failed");
@@ -115,19 +136,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const startGuestSession = async () => {
+    setIsAuthActionLoading(true);
+    try {
+      // Clear any stale Supabase session first
+      await supabase.auth.signOut().catch(() => {});
+      setSession(null);
+      setUser(null);
+      setGuestMode(true);
+      await writeGuestFlag(true);
+    } finally {
+      setIsAuthActionLoading(false);
+    }
+  };
+
+  const endGuestSession = async () => {
+    setIsAuthActionLoading(true);
+    try {
+      setGuestMode(false);
+      await writeGuestFlag(false);
+      // Note: caller (settings screen) is responsible for calling stopAll() before this
+    } finally {
+      setIsAuthActionLoading(false);
+    }
+  };
+
   const value = useMemo<AuthContextValue>(() => {
     const isAuthenticated = Boolean(session?.user?.id);
+    const isGuest = guestMode && !isAuthenticated;
+    const hasSession = isAuthenticated || isGuest;
+
     return {
       user,
       session,
       isAuthenticated,
-      isGuest: false,
+      isGuest,
+      hasSession,
+      isAuthLoaded: !isHydrating,
       isAuthActionLoading: isAuthActionLoading || isHydrating,
       signUpWithEmail,
       signInWithEmail,
       signOut,
+      startGuestSession,
+      endGuestSession,
     };
-  }, [user, session, isAuthActionLoading, isHydrating]);
+  }, [user, session, guestMode, isAuthActionLoading, isHydrating]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

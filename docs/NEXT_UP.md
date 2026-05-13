@@ -1,59 +1,36 @@
-# Next Up: History (V1)
+# Next Up
 
-Goal: Implement location history so users can review past pings/events in-app.
+_Last updated: 2026-05-12_
 
-## Scope (V1)
-- Record timeline entries for:
-  - Active tracking pings
-  - Emergency pings (clearly labeled)
-- Display a history list screen (tab: History)
-- Basic filters:
-  - Today / 7 days / 30 days (paid later if you want)
-  - Active vs Emergency
-- Tap entry -> details (lat/lng, timestamp, accuracy, mode)
-- Data source:
-  - Authed users: server + Supabase table
-  - Guests: local-only storage (AsyncStorage)
+---
 
-## Backend plan
-- New table: location_history (or location_events)
-  - id (uuid)
-  - user_id (uuid)
-  - lat, lng, accuracy_m
-  - mode (active|emergency)
-  - created_at
-- Endpoints:
-  - GET /api/history?from=&to=&mode=
-  - (Optional) GET /api/history/latest
-- Security:
-  - RLS: user can only read their own history
-  - Writes only from server (service role) OR via RPC with auth context
+## Completed (V1 Shipped)
 
-## Frontend plan
-- History tab UI
-- Hook: useHistory()
-  - fetch history
-  - loading/error states
-  - pull-to-refresh
-  - pagination (optional)
+- ✅ `location_history` table + server writes from `/api/locations` + `/api/emergency`
+- ✅ `GET /api/history` endpoint (from/to/mode filters, 200 limit, newest-first)
+- ✅ History UI screen (`app/(tabs)/history.tsx`)
+- ✅ History test script (`scripts/history-test.mjs`)
+- ✅ Live visibility system (trust requests, visibility toggles, `/api/live/visible` with presence expiry)
+- ✅ Emergency push notifications (`/api/emergency/alert` → Expo Push API)
+- ✅ Push token registration (`/api/push/register`, `push_tokens` table)
+- ✅ Background location task wiring (`src/lib/backgroundLocationTask.ts`)
+- ✅ Emergency deduplication (90s window via `emergency_alerts` table)
 
+---
 
-  # Next Up: History (V1)
+## Planned
 
-## Current status
-- `location_history` table exists + indexed + RLS enabled
-- History test script exists (logs in, posts pings, fetches history)
-- Next code step: server route + server writes are being finalized
+### High Priority
+- **Guest mode** — see `docs/AUTH_FLOW.md` Part 2 for full implementation spec
+- **DB-backed share sessions** — replace in-memory `sharesByToken` Map with `share_sessions` + `share_recipients` tables
+- **isPremium wiring** — currently hardcoded false; needs subscription/entitlement check
 
-# Next Up: History (V1)
+### Medium Priority
+- **Persistent rate limiting** — replace in-memory `lastPingByKey` Map with Redis or DB-backed store (resets on server restart today)
+- **Zod validation** — add input schema validation for all server routes
+- **Token hashing** — implement SHA-256 token hashing for share tokens (currently raw tokens)
 
-Status:
-- ✅ Supabase table created: `public.location_history`
-- ✅ Server writes history events from `/api/locations` + `/api/emergency`
-- ✅ GET `/api/history` endpoint supports `from`, `to`, `mode`
-- ✅ History UI screen scaffolding added (`app/(tabs)/history.tsx`)
-- ✅ History test script exists (`scripts/history-test.mjs`)
-
-Critical setup note:
-- Server requires `SUPABASE_SERVICE_ROLE_KEY` in `server/.env` to insert history rows.
-- Scripts use `.env.local` (root). Server uses `server/.env`.
+### Later
+- Supabase Realtime as an optional drop-in for live presence (only if strict permission enforcement is preserved)
+- App Store assets + iOS build
+- Push notification receipt polling (confirm delivery via Expo receipt API)

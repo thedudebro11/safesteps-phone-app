@@ -53,12 +53,12 @@ Conclusion: **No heavy performance optimization required yet.** Focus is on corr
 
 ## 4. Database-Level Performance
 
-For `location_pings`:
+For `location_history`:
 
 - Use an index on `(user_id, created_at DESC)`:
   ```sql
-  CREATE INDEX IF NOT EXISTS idx_location_pings_user_created
-  ON public.location_pings (user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_location_history_user_created
+  ON public.location_history (user_id, created_at DESC);
 
 
 ## Live Visibility Performance Improvements

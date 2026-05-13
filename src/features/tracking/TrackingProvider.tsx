@@ -62,6 +62,7 @@ type TrackingActions = {
   stopActive: () => Promise<void>;
   startEmergency: () => Promise<void>;
   stopEmergency: () => Promise<void>;
+  stopAll: () => Promise<void>;
   pingOnce: () => Promise<void>;
 };
 
@@ -577,6 +578,7 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       stopActive,
       startEmergency,
       stopEmergency,
+      stopAll,
       pingOnce: () => pingOnce(),
     }),
     [

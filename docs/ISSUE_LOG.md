@@ -1,803 +1,227 @@
-1. Login: CORS blocking Supabase Auth request (500 errors in web)
-
-Symptom:
-POST /auth/v1/token blocked by CORS, no Access-Control-Allow-Origin.
-
-Cause:
-Web build hitting Supabase Auth from Expo web without correct origin config.
-
-Fix:
-
-Configure Supabase → Authentication → URL settings
-
-Add development origin (http://localhost:8081)
-
-Restart dev server
-
-Status: Resolved.
-
-2. Stale react-server-dom-webpack entry in package-lock.json (false positive vulnerability concern)
-
-Symptom:
-You saw react-server-dom-webpack inside lockfile, worried about the React CVE.
-
-Cause:
-Stale metadata in lockfile from internal deps, not actually installed.
-
-Fix:
-
-rm -rf node_modules package-lock.json
-
-Reinstall
-
-Verified not in dependency tree (npm ls, npm why)
-
-Status: Resolved.
-
-3. Logout button not working (no console log, no state change)
-
-Symptom:
-Tapping Logout did nothing.
-
-Root cause:
-onPress wasn’t firing due to shadowed Pressable + no console output.
-
-Fix:
-
-Added console log
-
-Ensured correct function reference
-
-Confirmed signOut() executed
-
-Verified route protection working
-
-Status: Resolved.
-
-4. Guest mode not routing to Home reliably
-
-Symptom:
-Guest mode worked once or twice, then stopped updating the screen.
-
-Cause:
-hasSession didn’t change after first guest attempt → router didn’t rerun navigation logic.
-
-Fix:
-
-Added explicit router.replace("/home") inside handleGuest()
-
-Moved route gating into root _layout.tsx
-
-Status: Resolved.
-
-5. Tabs layout not recognized: “No route named '(tabs)' exists”
-
-Symptom:
-When pressing Guest, error logged:
-
-No route named "(tabs)" exists in nested children: ['login', 'register']
-
-
-Cause:
-Auth gating was placed inside app/(auth)/_layout.tsx instead of the root app _layout.tsx.
-
-Fix:
-
-Root layout now manages routing
-
-Auth layout simplified to stack-only
-
-Tabs layout unaffected
-
-Status: Resolved.
-
-6. Register screen failing: “signUp does not exist on AuthContextValue”
-
-Symptom:
-TypeScript error on signUp.
-
-Cause:
-Refactor renamed signUp → signUpWithEmail.
-
-Fix:
-Updated register screen to use new API.
-
-Status: Resolved.
-
-7. “isInitialLoading” not found on AuthContextValue
-
-Symptom:
-TS error: property missing.
-
-Cause:
-Old tutorial code referencing previous state names.
-
-Fix:
-Correct variable is isAuthLoaded.
-
-Status: Resolved.
-
-8. Web build opening directly to /home instead of auth screen
-
-Symptom:
-Opening a new browser tab skipped login and went straight to Home.
-
-Cause:
-Auth gating not applied globally — was inside (auth) layout only.
-
-Fix:
-
-Centralized route logic in root layout
-
-Added router.replace("/login") when no session present
-
-Status: Resolved.
-
-9. “Continue as Guest” from login → doesn’t refresh screen
-
-Symptom:
-Pressing guest again after navigating once didn’t update the UI.
-
-Cause:
-State didn’t change → React didn’t rerun rerouting logic.
-
-Fix:
-Force router navigation with:
-
-router.replace("/home");
-
-
-Status: Resolved.
-
-### 2025-12-10 — Investigated CVE-2025-55182 (React Server RCE)
-
-ISSUE:
-Found references to "react-server-dom-webpack" inside package-lock.json.
-Concern that SafeSteps may be affected by CVE-2025-55182 (React Server Functions RCE).
-
-INVESTIGATION:
-- Ran `npm ls react-server-dom-webpack`: (empty) → not installed.
-- Ran `npm why react-server-dom-webpack`: no dependencies found.
-- Deleted node_modules + lockfile and reinstalled clean.
-- Verified again: package not in dependency tree.
-- Searched codebase for any RSC / react-server imports → none found.
-- Verified SafeSteps does NOT use Next.js App Router, React Server Components, or Server Actions.
-- Ran `npm audit`: 0 vulnerabilities.
-
-CONCLUSION:
-SafeSteps is **not** affected. The entry in package-lock.json was a **stale metadata reference**, not an active dependency. No server code in SafeSteps uses the vulnerable RSC / Flight protocol.
-
-ACTION TAKEN:
-- No patches needed for SafeSteps frontend.
-- Confirmed backend (Express) does not use React Server Functions.
-- Added documentation here for future audits.
-
-
-## 2025-12-11 — Logout / Exit Guest Mode Does Not Return to Login on Web
-
-### Problem
-
-On Expo web, tapping **“Log Out”** or **“Exit Guest Mode”** on the Settings screen showed no navigation change.  
-The console showed the button `onPress` firing, but the app stayed on `/settings` and the session sometimes remained in an inconsistent state.
-
-### Context
-
-- Screen: `app/(tabs)/settings.tsx`
-- Environment: Expo web (`platform=web`) at `http://localhost:8081`
-- Using `useAuth()` for `signOut` and guest mode handling
-- Root `app/_layout.tsx` already uses `hasSession` to route between `(auth)` and `(tabs)` groups
-
-### Root Cause
-
-The confirmation flow used `Alert.alert(...)` and put the real `signOut()` / guest-exit logic inside the destructive action’s `onPress` callback.
-
-On web, that callback was not reliably firing, so:
-
-- The **initial button press** log appeared.
-- But `signOut()` and navigation never executed.
-
-This left the UI on `/settings` even when the intent was to log out or exit guest mode.
-
-### Solution
-
-1. Removed the `Alert.alert` confirmation wrapper from `Settings` logout logic on web.
-2. Simplified `handleLogout` to:
-
-   - Log the press for debugging.
-   - Directly call `await signOut()` (or the guest exit path).
-   - Immediately call `router.replace("/login")` after auth state is cleared.
-
-3. Verified in console:
-
-   - `[Settings] Logout button pressed …`
-   - `[Auth] state changed { hasSession: false, isGuest: false, ... }`
-   - `[Settings] signOut() completed, navigating to /login`
-
-4. Confirmed that the root auth gating (based on `hasSession`) still behaves correctly and that explicit `router.replace("/login")` keeps UX deterministic on web.
-
-### Why This Happened
-
-Relying on `Alert.alert` for critical control flow on web made logout behavior dependent on browser-specific dialog handling.  
-When the `onPress` of the destructive Alert action didn’t run, the app silently skipped the important logic.
-
-### How to Prevent This in the Future
-
-- Avoid using `Alert.alert` for **critical auth flows** (logout, account deletion) on web.
-- Prefer a deterministic pattern:
-
-  ```ts
-  await signOut();
-  router.replace("/login");
-
-
-# Known Issues / Next Improvements
-
-- Contacts screen should show a nicer, non-alert UX when contact limit reached
-  - Example: disable “+ Add” and show inline banner with “Upgrade to add more contacts”
-
-
-## [2026-01-11] Guest: Stop Active Tracking did not stop Live Share
-
-### Symptom
-In guest mode:
-1) Start Active Tracking on Home
-2) Go to Contacts (share flow) and tap “Share Location Link”
-3) Go back Home and stop Active Tracking
-✅ Tracking stopped
-❌ Contacts still showed SHARING / share session remained live
-
-Emergency behaved correctly: stopping Emergency also stopped the share state everywhere.
-
-### Expected Behavior
-When Active Tracking is stopped, any live share sessions created for that tracking run should be ended so the UI and app state remain consistent.
-
-### Root Cause
-The “stop active tracking” path was stopping the tracking loop, but it was not reliably ending live share sessions.
-This created a state mismatch:
-- Tracking mode became idle
-- Shares stayed live
-- Contacts UI (derived from shares) continued to show SHARING
-
-### Fix
-1) Introduced a provider-level helper to end shares in bulk:
-- `endAllLiveShares()` in `SharesProvider`
-  - Marks all live shares as ended (local state)
-  - Best-effort notifies server (`/api/shares/end`) for each token
-
-2) Updated tracking shutdown behavior:
-- `TrackingProvider.stopAll()` now captures the previous mode before switching to idle.
-- If the previous mode was `"active"`, it calls `endAllLiveShares()` after stopping the interval.
-
-This makes Active Tracking → STOP behave like a single “session end” that also closes any live shares started during that session.
-
-### Invariant added
-If tracking transitions from `"active"` → `"idle"`, there must be no remaining `"live"` share sessions.
-
-### Files touched
-- `src/features/shares/SharesProvider.tsx`
-- `src/features/tracking/TrackingProvider.tsx`
-
-
-## Troubleshooting: Guest Mode "Flips Back to False" / Won't Enter App
-
-### Symptom
-After tapping "Continue as Guest":
-- Logs show `guestMode: true` briefly
-- Then `guestMode: false` + `hasSession: false`
-- User stays on login screen / navigation doesn't move
-
-### Root Cause
-Calling `supabase.auth.signOut()` during `startGuestSession()` triggers Supabase `onAuthStateChange(SIGNED_OUT, null)`.
-If the AuthProvider listener blindly sets `guestMode = false` whenever session changes, it overrides the guest transition.
-
-This creates a race:
-1) startGuestSession sets guestMode true
-2) SIGNED_OUT event sets guestMode false
-3) route guard sees `hasSession=false` → stays/redirects to login
-
-### Fix
-1) Make Supabase auth listener disable guest mode ONLY when a real user session exists:
-- If `newSession?.user` → setGuestMode(false) and clear guest flag
-- If `newSession` is null → do NOT change guestMode
-
-2) Persist guest mode across reloads (web + native):
-- `GUEST_FLAG_KEY = "safesteps_guest"`
-- Implement `readGuestFlag()` + `writeGuestFlag(on)`:
-  - web: localStorage
-  - native: AsyncStorage
-
-3) Restore guest mode on app start:
-- During initial `loadSession()`:
-  - if no Supabase user AND `storedGuest === true`:
-    - setSession(null)
-    - setUser(null)
-    - setGuestMode(true)
-
-### Debugging Checklist
-- Confirm `EXPO_PUBLIC_API_BASE_URL` resolves correctly on device (LAN IP, not localhost).
-- Confirm logs end with:
-  - `guestMode: true`
-  - `hasSession: true`
-  - `isGuest: true`
-- If guest flips off, search for any code calling:
-  - `endGuestSession()`
-  - `setGuestMode(false)` outside of “real user session detected”
-
-Bug: stale “live shares” after app restart (mobile only)
-
-On Expo Go (Android), restarting Metro and rescanning the QR code caused:
-
-Shares to rehydrate from AsyncStorage as status === "live"
-
-Tracking state to reset to "idle" (fresh JS runtime)
-
-Result:
-
-Contacts screen showed “SHARING”
-
-Shares screen showed active shares
-
-Home screen showed tracking OFF
-
-This created a state inconsistency where sharing appeared active without tracking running.
-
-Root cause
-
-SharesProvider persists state via AsyncStorage and rehydrates on app boot
-
-TrackingProvider does not persist tracking mode (by design)
-
-On cold boot:
-
-Shares hydrate first
-
-Tracking initializes to "idle"
-
-Mobile (Expo Go) reliably exposes this because AsyncStorage survives Metro restarts, while JS state does not.
-
-Fix: boot-time reconciliation
-
-A one-time reconciliation runs after shares hydrate:
-
-If shares are loaded
-
-And tracking mode is "idle"
-
-And any shares are still marked "live"
-
-→ All live shares are immediately ended.
-
-Then describe where it lives:
-
-Implementation details
-
-SharesProvider
-
-Hydration is guarded with hydratedOnceRef to prevent double execution
-
-TrackingProvider
-
-A bootReconciledRef ensures reconciliation runs once per boot
-
-Effect depends on:
-
-sharesLoaded
-
-mode
-
-getActiveShares
-
-This guarantees deterministic behavior across restarts.
-
-Home Screen — Map-first UI + Bottom Action Drawer
-
-Goal: Make the Home screen feel “Life360-style”: map as the base layer, with a draggable bottom sheet that overlays the map and provides tracking controls without duplicating tab navigation.
-
-Files touched
-
-src/features/home/MapFirstHomeScreen.native.tsx
-
-src/features/home/components/BottomActionDrawer.tsx
-
-MapFirstHomeScreen.native.tsx
-
-What it does
-
-Renders the map as the base layer
-
-Renders top overlay controls (settings, title pill, notifications)
-
-Renders <BottomActionDrawer tabBarHeight={useBottomTabBarHeight()} />
-
-Why
-
-Keeps the map always visible behind UI overlays
-
-Passes real tab bar height to ensure the drawer sits flush with the bottom tabs and doesn’t reveal map underneath the tab bar area
-
-BottomActionDrawer.tsx — final behavior + how we achieved it
-Desired behavior (target UX)
-
-Drawer starts in a collapsed “peek” state
-
-User can drag up/down smoothly
-
-Drawer should expand exactly as far as the user drags
-
-When user releases, the drawer should stay where it was released (no snapping)
-
-Drawer must never expand beyond its intended bounds such that:
-
-the user sees the bottom of the drawer
-
-or sees the map peeking through at the bottom
-
-Problem we hit
-
-Early versions behaved like a traditional 2-snap sheet:
-
-If dragged enough, it snapped fully open
-
-Otherwise it snapped back down
-
-Spring animations could overshoot and reveal bottom drawer space / map underneath
-
-PanResponder on the entire sheet also risked fighting with slider interactions
-
-Final solution
-
-We implemented a free-drag (non-snapping) bottom drawer with strict clamping:
-
-Clamp movement within bounds
-
-We compute two limits:
-
-MIN_TRANSLATE_Y = 0 (fully expanded)
-
-MAX_TRANSLATE_Y = MAX_VISUAL_HEIGHT - PEEK_HEIGHT (collapsed peek)
-
-During dragging, we clamp translateY:
-
-prevents overscroll
-
-prevents revealing the map at the bottom
-
-No snapping on release
-
-Removed midpoint snap logic entirely
-
-On release, we keep the current value:
-
-const inertial = value;
-
-Result: drawer remains exactly where the user drops it
-
-No gesture conflicts with slider/buttons
-
-PanResponder handlers are attached only to the handle zone
-
-This makes the slider/buttons responsive and avoids accidental drags while interacting with controls
-
-Deterministic start state
-
-Drawer always starts collapsed by setting:
-
-translateY.setValue(MAX_TRANSLATE_Y)
-
-lastTranslateY.current = MAX_TRANSLATE_Y
-
-Fixes retained Animated.Value issues during hot reload
-
-Key implementation notes
-
-MAX_VISUAL_HEIGHT is capped to avoid collision with top overlay controls
-
-PEEK_HEIGHT controls how much of the drawer is visible when collapsed
-
-translateY is the single source of truth for drawer position:
-
-0 = expanded
-
-MAX_TRANSLATE_Y = collapsed
-
-UX additions
-
-“Ping frequency” label + a right-aligned pill showing the current selected interval (e.g. 5 min ping)
-
-Battery meaning row with icons:
-
-Less battery (left)
-
-More battery (right)
-
-Home Screen – Map-First Drawer Architecture
-Overview
-
-The Home screen uses a map-first layout with a height-animated bottom action drawer that behaves similarly to Life360.
-
-Key design goals:
-
-Map is always the base layer
-
-Drawer starts collapsed
-
-Drawer expands via direct drag (free-drag, no snap)
-
-Drawer never detaches from the bottom tab bar
-
-No visual gaps where the map can bleed through
-
-Drawer Positioning Model (Critical)
-
-The drawer uses a height-based animation model, not translateY.
-
-Core rule:
-
-The drawer’s bottom edge is permanently anchored to the tab bar.
-Only the top edge moves by animating height.
-
-This avoids all common bottom-sheet bugs:
-
-overscroll gaps
-
-map bleed at the bottom
-
-snap fights
-
-inconsistent collapsed states
-
-Implementation Details
-
-File:
-src/features/home/components/BottomActionDrawer.tsx
-
-Anchoring strategy
-<View
-  style={{
-    position: "absolute",
-    bottom: tabBarHeight,
-    left: 0,
-    right: 0,
-    height: MAX_HEIGHT,
-  }}
->
-
-
-bottom: tabBarHeight is applied once at the shell level
-
-The animated drawer inside uses bottom: 0
-
-No padding or offsets related to the tab bar inside the drawer
-
-This ensures the drawer always sits flush on top of the bottom navigation bar.
-
-Height-based animation (why it works)
-
-Instead of translating the drawer vertically, we animate its height:
-
-const heightRaw = useRef(new Animated.Value(COLLAPSED_H)).current;
-
-
-Drag logic:
-
-Drag up → increase height
-
-Drag down → decrease height
-
-Height is clamped between:
-
-COLLAPSED_H
-
-MAX_HEIGHT
-
-const next = clamp(
-  lastHeight.current - gesture.dy,
-  COLLAPSED_H,
-  MAX_HEIGHT
-);
-heightRaw.setValue(next);
-
-
-This guarantees:
-
-No overshoot
-
-No bottom gaps
-
-Smooth, predictable interaction
-
-Free-drag behavior (no snapping)
-
-On release, the drawer stays exactly where the user leaves it:
-
-onPanResponderRelease: () => {
-  heightRaw.stopAnimation((value) => {
-    settleHeight(value);
-  });
-};
-
-
-This provides a more natural, tactile feel compared to snap-only drawers.
-
-Initial state reliability
-
-To prevent fast refresh / hot reload issues:
-
-useEffect(() => {
-  heightRaw.setValue(COLLAPSED_H);
-  lastHeight.current = COLLAPSED_H;
-}, []);
-
-
-The drawer always starts collapsed, even after reloads.
-
-Resulting UX
-
-Drawer expands smoothly
-
-Stops exactly where the user releases
-
-Never reveals the map underneath
-
-Always sits perfectly on top of the tab bar
-
-Matches modern “map + control surface” UX patterns
-
-Ping Frequency Slider UX
-
-The ping frequency slider is continuous, not discrete.
-
-Users can drag freely across the range
-
-Values are quantized internally (step = 5 seconds)
-
-Displayed values are formatted cleanly (seconds or minutes to 2 decimals)
-
-Battery impact is communicated visually (less ↔ more battery)
-
-This gives users fine-grained control without sacrificing safety or battery constraints.
-
-Bug Fix: Emergency share state didn’t clear when emergency stopped
-
-Problem
-
-When a user started Emergency, then shared a live location link to a contact, the UI would correctly show “sharing.”
-
-After turning Emergency OFF, the tracking loop stopped — but the app still showed the contact/share as actively sharing.
-
-Result: the contact/share screens stayed “stuck” in a live state until manually ended.
-
-Root cause
-
-stopAll() only ended shares for "active" mode.
-
-Emergency mode shutdown wasn’t ending live share sessions, so ShareSession.status remained "live".
-
-Fix
-
-Updated stopAll() in TrackingProvider.tsx to end all live shares when exiting either:
-
-"active" or
-
-"emergency"
-
-This keeps share state consistent with tracking state: stopping tracking now guarantees no live shares remain.
-
-Files changed
-
-src/features/tracking/TrackingProvider.tsx
-
-src/features/shares/SharesProvider.tsx (only if you also adjusted anything here; otherwise remove)
-
-Verification
-
-Start Emergency
-
-Create a share for a contact (reason "emergency")
-
-Stop Emergency
-
-Confirm:
-
-share session(s) become status: "ended"
-
-UI immediately stops showing “sharing”
-
-
-## Server won’t start: "Missing SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY"
-
-Cause:
-- `npm run api` loads `server/.env`, not `.env.local`.
-- The server needs **SUPABASE_SERVICE_ROLE_KEY** to write to Supabase tables.
-
-Fix:
-1) Open `server/.env`
-2) Add:
-   - SUPABASE_URL=...
-   - SUPABASE_ANON_KEY=...
-   - SUPABASE_SERVICE_ROLE_KEY=...
-3) Restart server: `npm run api`
-
-Notes:
-- `.env.local` is for app + scripts, NOT the server.
-
-
-## Issue: Slow Presence Stop + Delayed Visibility Updates
-
-### Problem
-When Active Tracking was turned OFF, the other device would continue to show the user as live for up to 2 minutes.
-
-### Root Cause
-The `/api/presence/stop` route was not registered due to a server restart issue, causing 404 errors.
-Presence rows were relying solely on TTL expiration instead of immediate deletion.
-
-### Fix
-- Restarted server to properly register the route.
-- Verified presence deletion via server logs.
-- Implemented immediate stopPresence() call in TrackingProvider.
-- Added polling boost window when tracking turns ON.
-- Prevented overlapping polling requests.
-
-### Result
-Presence ON and OFF now reflect nearly instantly.
-
-# Issue Log
-
-This file records bugs discovered during development and how they were resolved.
+# SafeSteps — Issue Log
+
+_Last updated: 2026-05-12_
+
+> **Note for agents:** This is a historical record of bugs and how they were resolved. A few entries reference APIs or patterns that have since changed:
+> - **`isAuthLoaded`**: referenced as "the correct variable" in early entries. It is NOT currently exported from `AuthProvider`. The current flag is `isAuthActionLoading` (which covers both hydration and action loading).
+> - **`hasSession`**: referenced in early entries as an exported prop. NOT currently exported. Current routing uses `isAuthenticated` only.
+> - **`router.replace` after logout**: documented as a fix in Issue #11. Current pattern: screens do NOT call `router.replace` — `_layout.tsx` handles all redirects based on `isAuthenticated`.
+> - **Guest mode entries (#4, #9)**: guest mode was partially prototyped and then deferred. It is NOT currently implemented. See `docs/AUTH_FLOW.md` Part 2 for the full build spec.
 
 ---
 
-## Issue: History Tab Stops Updating
+## Resolved Issues
 
-Date discovered: March 2026
+---
 
-### Symptoms
+### Issue 1 — Login: CORS Blocking Supabase Auth (Web)
 
-History entries would stop updating unless the user tapped the **Today** filter.
+**Symptom:** `POST /auth/v1/token` blocked, no `Access-Control-Allow-Origin`.
 
-Manual refresh sometimes appeared to do nothing.
+**Cause:** Supabase project hadn't whitelisted the dev origin (`http://localhost:8081`).
 
-### Cause
+**Fix:** Supabase Dashboard → Authentication → URL Configuration → add `http://localhost:8081`.
 
-The history API query window used a `to` timestamp generated inside a `useMemo`.
+**Status:** Resolved.
 
-Because the memo only recalculated when filters changed, the `to` timestamp became frozen.
+---
 
-This meant the API repeatedly requested history up to the same timestamp.
+### Issue 2 — Stale `react-server-dom-webpack` in Lockfile (False Positive)
 
-Example problematic pattern:
+**Symptom:** Entry visible in `package-lock.json`; concern about CVE-2025-55182.
 
-const queryString = useMemo(() => {
-const to = new Date().toISOString()
-}, [filters])
+**Investigation:** `npm ls react-server-dom-webpack` returned empty. `npm why` returned nothing. Not in dependency tree. `npm audit`: 0 vulnerabilities. SafeSteps does not use React Server Components.
 
+**Conclusion:** Stale lockfile metadata, not an active dependency. No action required.
 
-### Resulting behavior
+**Status:** Resolved (not applicable).
 
-New location pings were created in the database, but they were outside the query window.
+---
 
-Therefore the UI never saw them.
+### Issue 3 — Logout Button Not Responding on Settings Screen
 
-### Fix
+**Symptom:** Tapping Logout did nothing; no console output.
 
-The time range builder was moved into the fetch function so it executes every request.
+**Cause:** `onPress` attached to wrong element (inner child, not `Pressable` wrapper).
 
+**Fix:** Moved `onPress` to the `Pressable` parent directly.
 
-const { from, to } = buildRange(filters)
+**Status:** Resolved.
 
+---
 
-This ensures the `to` timestamp always reflects the current time.
+### Issue 4 — Guest Mode Not Routing to Home Reliably *(early prototype)*
 
-### Additional Improvements
+> **Note:** Guest mode was later deferred entirely. `isGuest` is currently hardcoded `false`. This issue describes a prototype behavior. See `docs/AUTH_FLOW.md` Part 2 for the build spec when guest mode is implemented.
 
-While fixing the issue I also implemented:
+**Symptom:** Guest mode worked once, then stopped updating the screen.
 
-• silent polling refresh  
-• overlap protection for requests  
-• stable FlatList keys  
+**Cause:** `hasSession` didn't change after first guest attempt → router didn't re-run.
 
-These changes made the History tab behave more like a real event feed.
+**Historical fix:** Added `router.replace("/home")` inside guest handler; moved gating to root `_layout.tsx`.
 
-### Status
+---
 
-Resolved
+### Issue 5 — Tabs Layout Error: "No route named '(tabs)' exists"
+
+**Symptom:** Pressing Guest logged: `No route named "(tabs)" exists in nested children`.
+
+**Cause:** Auth gating was placed inside `app/(auth)/_layout.tsx` instead of root `_layout.tsx`.
+
+**Fix:** Root layout now owns all routing logic. Auth layout simplified to stack-only.
+
+**Status:** Resolved.
+
+---
+
+### Issue 6 — Register Screen: "signUp does not exist on AuthContextValue"
+
+**Symptom:** TypeScript error on `signUp`.
+
+**Cause:** Refactor renamed `signUp` → `signUpWithEmail`.
+
+**Fix:** Updated register screen to use `signUpWithEmail`.
+
+**Status:** Resolved.
+
+---
+
+### Issue 7 — "isInitialLoading" Not Found on AuthContextValue
+
+> **Note:** The fix here says "correct variable is `isAuthLoaded`" — but `isAuthLoaded` is also not currently exported. The current exported flag is `isAuthActionLoading` (covers both hydration and auth actions). This entry is historical; don't treat `isAuthLoaded` as the current API.
+
+**Symptom:** TS error: property `isInitialLoading` missing.
+
+**Cause:** Old code referencing a previous state name.
+
+**Historical fix:** Use `isAuthLoaded` (which was exported at the time).
+
+**Current API:** `isAuthActionLoading` in `AuthProvider.tsx`.
+
+---
+
+### Issue 8 — Web Build Opening Directly to /home Instead of Auth Screen
+
+**Symptom:** New browser tab skipped login and went straight to Home.
+
+**Cause:** Auth gating was only inside `(auth)` layout, not applied globally.
+
+**Fix:** Centralized route logic in root `_layout.tsx`. Redirect to `/login` when no session.
+
+**Status:** Resolved.
+
+---
+
+### Issue 9 — "Continue as Guest" Second Press Doesn't Update UI *(early prototype)*
+
+> **Note:** Guest mode is currently deferred. See Issue 4 note.
+
+**Symptom:** Pressing guest a second time after navigating didn't update the UI.
+
+**Cause:** State didn't change → React didn't re-run routing logic.
+
+**Historical fix:** Force `router.replace("/home")`.
+
+---
+
+### Issue 10 — Server Won't Start: Missing Supabase Env Vars
+
+**Symptom:** Server exits immediately with missing env var errors.
+
+**Cause:** `npm run start:server` (and `npm run api`) loads `server/.env`, not `.env.local`. The server requires `SUPABASE_SERVICE_ROLE_KEY` to write to Supabase tables.
+
+**Fix:**
+1. Open `server/.env`
+2. Add `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+3. Restart: `npm run start:server`
+
+**Status:** Resolved. (`.env.local` is for the app + scripts only.)
+
+---
+
+### Issue 11 — Logout / Exit Guest Mode Not Returning to Login on Web
+
+> **Note:** The historical fix here called `router.replace("/login")` after `signOut()`. The **current architecture** does not do this — screens only mutate auth state; `_layout.tsx` handles all redirects automatically via `isAuthenticated`. The `router.replace` call is no longer needed and would be redundant.
+
+**Symptom:** Tapping Log Out on web stayed on `/settings`.
+
+**Root Cause:** `Alert.alert` destructive callback not reliably firing on web.
+
+**Historical fix:** Removed `Alert.alert` wrapper; called `signOut()` directly then `router.replace("/login")`.
+
+**Current pattern:** Call `signOut()` only. `_layout.tsx` redirects automatically. Do not add `router.replace`.
+
+---
+
+### Issue 12 — Presence OFF Delay (~2 Minutes)
+
+**Symptom:** After stopping Active Tracking, other devices showed the user as live for ~2 minutes.
+
+**Root Cause:** `/api/presence/stop` was returning 404 — server hadn't loaded the route (needed restart). Presence was relying on TTL expiry.
+
+**Fix:**
+- Restarted Express server to register the route
+- `TrackingProvider.stopAll()` now calls `POST /api/presence/stop` → immediate row deletion
+- Boost polling window (1s for 12s) makes the change near-instantly visible
+
+**Status:** Resolved.
+
+---
+
+### Issue 13 — History Tab Stops Updating Without Filter Change
+
+**Symptom:** History entries stopped appearing unless the Today filter was tapped again.
+
+**Root Cause:** `to` timestamp computed inside `useMemo` with `[filters]` dependency → frozen until filters changed.
+
+**Fix:** Moved `buildRange()` inside the fetch function so `to` is recomputed on every request. Added silent refresh mode and stable `FlatList` keys.
+
+**Status:** Resolved.
+
+---
+
+### Issue 14 — Stale Live Shares After App Restart (Mobile)
+
+**Symptom:** After Metro restart, Contacts/Shares showed "SHARING" but Home showed tracking OFF.
+
+**Root Cause:** `SharesProvider` rehydrates from AsyncStorage on boot. `TrackingProvider` always boots in `idle`. No reconciliation between the two.
+
+**Fix:** Boot-time reconciliation: if shares are loaded + tracking is `idle` + any shares are `live` → end them all immediately. Guards: `hydratedOnceRef` (SharesProvider), `bootReconciledRef` (TrackingProvider).
+
+**Status:** Resolved.
+
+---
+
+### Issue 15 — Stop Active Tracking Didn't End Live Share Sessions
+
+**Symptom:** After stopping Active Tracking, Contacts still showed SHARING.
+
+**Root Cause:** `stopAll()` in `TrackingProvider` stopped the loop but didn't call `endAllLiveShares()`.
+
+**Fix:** `TrackingProvider.stopAll()` now captures previous mode; calls `SharesProvider.endAllLiveShares()` if previous mode was `active` or `emergency`.
+
+**Invariant added:** If tracking transitions from `active`/`emergency` → `idle`, no live shares may remain.
+
+**Status:** Resolved.
+
+---
+
+### Issue 16 — Emergency Share State Not Clearing When Emergency Stopped
+
+**Symptom:** Stopping Emergency left share sessions as `live` in Contacts/Shares UI.
+
+**Root Cause:** `stopAll()` only ended shares for `active` mode, not `emergency`.
+
+**Fix:** Updated `stopAll()` to end all live shares when exiting either `active` or `emergency`.
+
+**Status:** Resolved.
+
+---
+
+## Open / Known Gaps
+
+- Contacts screen should show inline banner when contact limit is reached (instead of an alert)
+- `isPremium` is hardcoded `false` — tier-gated limits for premium users not enforced
+- Guest mode not implemented — `isGuest` hardcoded `false` (see `docs/AUTH_FLOW.md` Part 2)
+- Share sessions are in-memory — reset on server restart (see `docs/NEXT_UP.md`)
+- Persistent rate limiting not yet implemented (in-memory map resets on restart)

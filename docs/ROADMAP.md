@@ -19,7 +19,7 @@ Tabs: Home / Contacts / Shares / History / Settings.
 ### V1 Milestones (Build Order)
 1) **Database schema + RLS**
    - `trusted_contacts`
-   - `location_pings`
+   - `location_history`
    - `share_sessions`
    - `share_recipients` (token hashes)
 2) **Tracking provider (single timer)**

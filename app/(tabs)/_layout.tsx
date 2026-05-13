@@ -2,6 +2,7 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 
 const TAB_BG = "#050814";
 const ACTIVE = "#3896ff";
@@ -9,6 +10,7 @@ const MUTED = "#a6b1cc";
 
 export default function TabsLayout() {
   return (
+    <ErrorBoundary>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -66,5 +68,6 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </ErrorBoundary>
   );
 }
