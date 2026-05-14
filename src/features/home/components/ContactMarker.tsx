@@ -33,6 +33,7 @@ export default function ContactMarker({ userId, lat, lng, mode, displayName, ema
   const label = displayName || email || "Contact";
   const initial = label[0].toUpperCase();
 
+
   // Pulse border opacity for emergency markers
   const pulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -51,7 +52,7 @@ export default function ContactMarker({ userId, lat, lng, mode, displayName, ema
     <Marker
       key={userId}
       coordinate={{ latitude: lat, longitude: lng }}
-      tracksViewChanges={isEmergency}
+      tracksViewChanges
       anchor={{ x: 0.5, y: 1 }}
       calloutAnchor={{ x: 0.5, y: 0 }}
     >
@@ -72,7 +73,7 @@ export default function ContactMarker({ userId, lat, lng, mode, displayName, ema
               cachePolicy="memory-disk"
             />
           ) : (
-            <View style={[styles.initialsCircle, { backgroundColor: isEmergency ? "#3a0a10" : "#0a1f14" }]}>
+            <View style={[styles.initialsCircle, { backgroundColor: isEmergency ? "#3a0a10" : "#0d3320" }]}>
               <Text style={[styles.initial, { color: borderColor }]}>{initial}</Text>
             </View>
           )}

@@ -151,6 +151,7 @@ export default function MapFirstHomeScreen() {
 
       // Don't render myself as an "other" marker (you already have blue-dot)
       const others = myUserId ? users.filter((u) => u.userId !== myUserId) : users;
+      console.log("[map] fetchVisible raw:", users.length, "filtered:", others.length, others.map(u => ({ id: u.userId.slice(0,8), mode: u.mode, lat: u.lat, lng: u.lng })));
       const nextCount = others.length;
       if (nextCount !== lastCountRef.current) {
         setBoostPollUntil(Date.now() + 12_000);
@@ -160,6 +161,7 @@ export default function MapFirstHomeScreen() {
       setLastUpdatedIso(new Date().toISOString());
       setErrorMsg(null);
     } catch (e: any) {
+      console.log("[map] fetchVisible error:", e?.message);
       setErrorMsg(e?.message ?? "Failed to load live users");
     } finally {
       setIsFirstLoad(false);
