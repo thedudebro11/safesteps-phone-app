@@ -39,4 +39,27 @@ liveRouter.get("/visible", requireUser, async (req, res) => {
   }
 });
 
+// GET /api/live/debug — shows exactly what each table has for the calling user
+liveRouter.get("/debug", requireUser, async (req, res) => {
+  const viewerId = req.userId;
+
+  const [presenceAll, visibility, trustOut, trustIn, rpcResult] = await Promise.all([
+    supabaseAdmin.from("live_presence").select("*"),
+    supabaseAdmin.from("live_visibility").select("*").or(`owner_user_id.eq.${viewerId},viewer_user_id.eq.${viewerId}`),
+    supabaseAdmin.from("trusted_contacts").select("*").eq("requester_user_id", viewerId),
+    supabaseAdmin.from("trusted_contacts").select("*").eq("requested_user_id", viewerId),
+    supabaseAdmin.rpc("get_visible_users", { viewer_id: viewerId }),
+  ]);
+
+  return res.json({
+    viewerId,
+    live_presence: presenceAll.data ?? [],
+    live_visibility: visibility.data ?? [],
+    trust_sent_by_me: trustOut.data ?? [],
+    trust_sent_to_me: trustIn.data ?? [],
+    rpc_result: rpcResult.data ?? [],
+    rpc_error: rpcResult.error ?? null,
+  });
+});
+
 module.exports = { liveRouter };

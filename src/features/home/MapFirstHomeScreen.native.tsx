@@ -186,10 +186,14 @@ export default function MapFirstHomeScreen() {
 
       const tick = async () => {
         if (!alive) return;
-        if (!accessToken || !allowMapLocation) {
-          // when idle or signed out, slow/no polling
-          const nextDelay = 5000;
-          t = setTimeout(tick, nextDelay);
+        if (!accessToken) {
+          t = setTimeout(tick, 15_000);
+          return;
+        }
+        if (!allowMapLocation) {
+          // idle — still poll slowly so contacts' locations appear even when you're not tracking
+          await fetchVisible();
+          t = setTimeout(tick, 15_000);
           return;
         }
         // ✅ prevent overlap
